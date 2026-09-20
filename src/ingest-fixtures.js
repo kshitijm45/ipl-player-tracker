@@ -124,17 +124,68 @@ function tagRelevant(fixtures) {
   // the schedule than in a scorecard.
   const cores = new Set([...comps].map((k) => k.split('|')[0]).filter(Boolean));
 
+  // Who has been turning out in each competition, and for which side? The schedule
+  // names clubs in full ("Jamaica Kingsmen") while scorecards abbreviate ("JKM"),
+  // so a player is attached to a fixture when his side's abbreviation is a
+  // plausible short form of one of the two teams listed.
+  const recent = perf.filter((r) => r.date >= daysAgo(45));
+  const byComp = new Map();
+  for (const r of recent) {
+    const k = compKey(r.competition).split('|')[0];
+    if (!byComp.has(k)) byComp.set(k, []);
+    byComp.get(k).push(r);
+  }
+
   return fixtures.map((f) => {
     const key = compKey(f.competition);
-    return {
-      ...f,
-      watch:
-        comps.has(key) ||
-        cores.has(key.split('|')[0]) ||
-        teams.has(norm(f.teamA)) ||
-        teams.has(norm(f.teamB)),
-    };
+    const core = key.split('|')[0];
+    const watch = comps.has(key) || cores.has(core) || teams.has(norm(f.teamA)) || teams.has(norm(f.teamB));
+
+    let players = [];
+    if (watch) {
+      const pool = byComp.get(core) ?? [];
+      const seen = new Map();
+      for (const r of pool) {
+        if (!r.team) continue;
+        const side = matchesSide(r.team, f.teamA) ? f.teamA
+                   : matchesSide(r.team, f.teamB) ? f.teamB
+                   : null;
+        if (!side) continue;
+        if (!seen.has(r.playerId)) seen.set(r.playerId, { playerId: r.playerId, side });
+      }
+      players = [...seen.values()];
+    }
+
+    return { ...f, watch, players };
   });
+}
+
+/**
+ * Is `code` (as printed on a scorecard, e.g. "JKM") a short form of `full`
+ * ("Jamaica Kingsmen")? Compares the code's letters against the initials of the
+ * full name, then against its opening letters.
+ */
+function matchesSide(code, full) {
+  if (!code || !full) return false;
+  const c = norm(code);
+  const f = norm(full);
+  if (!c || !f) return false;
+  if (c === f) return true;
+
+  const initials = String(full).split(/\s+/).map((w) => w[0]?.toLowerCase() ?? '').join('');
+  if (c === initials) return true;
+  // "JKM" against "jamaicakingsmen": every letter present, in order.
+  let i = 0;
+  for (const ch of c) {
+    i = f.indexOf(ch, i);
+    if (i === -1) return false;
+    i++;
+  }
+  return c.length >= 2;
+}
+
+function daysAgo(n) {
+  return new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
 }
 
 const norm = (s) => String(s).toLowerCase().replace(/[^a-z]/g, '');

@@ -27,7 +27,10 @@ const OUT = new URL('../../data/crex-players.json', import.meta.url).pathname;
 export function cleanLinkName(raw) {
   let s = raw.replace(/\s+/g, ' ').trim();
   s = s.replace(/Avg:.*$/i, '').replace(/SR:.*$/i, '');
-  s = s.replace(/\bIMPACT\b/gi, '');
+  // The badge is glued straight onto the name in the markup ("Dasun ShanakaIMPACT"),
+  // so it needs stripping without a word boundary — with one, it survives and every
+  // later name comparison against it fails.
+  s = s.replace(/IMPACT/gi, '');
   s = s.replace(/\((?:C|WK|C\s*&\s*WK|VC)\)/gi, '');
   // News/teaser links ("Hardik Pandya's IPL trade") are not scorecard entries.
   if (/['’]s\s/.test(s)) return '';

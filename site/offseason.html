@@ -799,6 +799,19 @@
   .fx-teams { font-size: 14.5px; min-width: 0; }
   .fx-teams b { font-weight: 600; }
   .fx-comp { font-size: 12.5px; color: var(--ink-3); text-align: right; }
+  .fx-who { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .fx-p {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--team-wash), .4);
+    background: rgba(var(--team-wash), .1);
+    color: var(--team);
+    transition: background .14s var(--e);
+  }
+  .fx-p:hover { background: rgba(var(--team-wash), .2); }
+  .fx-p:focus-visible { outline: 2px solid var(--team); outline-offset: 1px; }
 
   .blank {
     padding: 72px 32px;
@@ -1199,12 +1212,21 @@ function comingUp() {
       ${[...byDay.entries()].map(([d, list]) => `
         <div class="fx-day">
           <div class="eyebrow">${dLong(d)}</div>
-          ${list.map((f) => `
-            <div class="fx">
+          ${list.map((f) => {
+            const who = (f.players ?? [])
+              .map((x) => ({ p: P.find((y) => y.id === x.playerId), side: x.side }))
+              .filter((x) => x.p);
+            return `<div class="fx">
               <span class="fx-time mono">${esc(f.time)}</span>
-              <span class="fx-teams"><b>${esc(f.teamA)}</b> v <b>${esc(f.teamB)}</b></span>
+              <span class="fx-teams">
+                <b>${esc(f.teamA)}</b> v <b>${esc(f.teamB)}</b>
+                ${who.length ? `<span class="fx-who">${who.map((x) =>
+                  `<button class="fx-p" data-team="${esc(club1(x.p))}" data-id="${esc(x.p.id)}"
+                    title="${esc(x.p.name)} — ${esc(x.side)}">${esc(x.p.name)}</button>`).join('')}</span>` : ''}
+              </span>
               <span class="fx-comp">${esc(f.competition)}${f.stage ? ` · ${esc(f.stage)}` : ''}</span>
-            </div>`).join('')}
+            </div>`;
+          }).join('')}
         </div>`).join('')}
     </div>`;
 }
