@@ -2,6 +2,11 @@
   "note": "CREX player slugs pinned to canonical Cricsheet ids. `displayName` is the common name CREX prints, which is what the site shows; the Cricsheet register name is kept for identity only. Harvested from IPL 2026 scorecards.",
   "lastUpdated": "2026-09-20",
   "pins": {
+    "11061889": {
+      "slug": "saurabh-dubey-62M",
+      "code": "62M",
+      "displayName": "Saurabh Dubey"
+    },
     "12314277": {
       "slug": "arshad-khan-5SH",
       "code": "5SH",
@@ -691,18 +696,243 @@
       "slug": "deepak-chahar-3U",
       "code": "3U",
       "displayName": "Deepak Chahar"
+    },
+    "3ff033bb": {
+      "slug": "dasun-shanaka-K2",
+      "code": "K2",
+      "displayName": "Dasun Shanaka"
+    },
+    "de7d833e": {
+      "slug": "dilshan-madushanka-17J",
+      "code": "17J",
+      "displayName": "Dilshan Madushanka"
+    },
+    "12b610c2": {
+      "slug": "travis-head-9O",
+      "code": "9O",
+      "displayName": "Travis Head"
+    },
+    "989889ff": {
+      "slug": "josh-inglis-20O",
+      "code": "20O",
+      "displayName": "Josh Inglis"
+    },
+    "2c25d4f5": {
+      "slug": "devdutt-padikkal-EI",
+      "code": "EI",
+      "displayName": "Devdutt Padikkal"
+    },
+    "fe93fd9d": {
+      "slug": "ravindra-jadeja-7",
+      "code": null,
+      "displayName": "Ravindra Jadeja"
+    },
+    "85e0cf10": {
+      "slug": "prasidh-krishna-EF",
+      "code": "EF",
+      "displayName": "Prasidh Krishna"
+    },
+    "8d2c70ad": {
+      "slug": "kuldeep-yadav-75",
+      "code": "75",
+      "displayName": "Kuldeep Yadav"
+    },
+    "470f446b": {
+      "slug": "vaibhav-sooryavanshi-DBT",
+      "code": "DBT",
+      "displayName": "Vaibhav Sooryavanshi"
+    },
+    "df064e1a": {
+      "slug": "ravi-bishnoi-16E",
+      "code": "16E",
+      "displayName": "Ravi Bishnoi"
+    },
+    "4b31f3a3": {
+      "slug": "yash-ravisingh-thakur-5UZ",
+      "code": "5UZ",
+      "displayName": "Yash Ravisingh Thakur"
+    },
+    "ba607b88": {
+      "slug": "virat-kohli-4I",
+      "code": "4I",
+      "displayName": "Virat Kohli"
+    },
+    "3c55c703": {
+      "slug": "jacob-bethell-6K0",
+      "code": "6K0",
+      "displayName": "Jacob Bethell"
+    },
+    "740742ef": {
+      "slug": "rohit-sharma-2X",
+      "code": "2X",
+      "displayName": "Rohit Sharma"
+    },
+    "5b7ab5a9": {
+      "slug": "varun-chakaravarthy-EK",
+      "code": "EK",
+      "displayName": "Varun Chakaravarthy"
+    },
+    "f1f99156": {
+      "slug": "tim-david-2WT",
+      "code": "2WT",
+      "displayName": "Tim David"
+    },
+    "4d7f517e": {
+      "slug": "akeal-hosein-21J",
+      "code": "21J",
+      "displayName": "Akeal Hosein"
+    },
+    "39a2dfa8": {
+      "slug": "rahul-tewatia-BK",
+      "code": "BK",
+      "displayName": "Rahul Tewatia"
+    },
+    "b8527c3d": {
+      "slug": "rasikh-salam-EO",
+      "code": "EO",
+      "displayName": "Rasikh Salam"
+    },
+    "02dfebbe": {
+      "slug": "yash-punja-BO7",
+      "code": "BO7",
+      "displayName": "Yash Punja"
+    },
+    "280fff14": {
+      "slug": "sakib-hussain-A44",
+      "code": "A44",
+      "displayName": "Sakib Hussain"
+    },
+    "bf74b130": {
+      "slug": "finn-allen-4W4",
+      "code": "4W4",
+      "displayName": "Finn Allen"
+    },
+    "84d9c311": {
+      "slug": "ashutosh-sharma-5SI",
+      "code": "5SI",
+      "displayName": "Ashutosh Sharma"
+    },
+    "6b2ff18f": {
+      "slug": "shubham-dubey-650",
+      "code": "650",
+      "displayName": "Shubham Dubey"
+    },
+    "7c3c0337": {
+      "slug": "auqib-nabi-60B",
+      "code": "60B",
+      "displayName": "Auqib Nabi"
+    },
+    "9ca68676": {
+      "slug": "allah-mohammad-ghazanfar-93C",
+      "code": "93C",
+      "displayName": "Allah Mohammad Ghazanfar"
+    },
+    "5b615e7c": {
+      "slug": "raghu-sharma-5VO",
+      "code": "5VO",
+      "displayName": "Raghu Sharma"
+    },
+    "13fc5c6d": {
+      "slug": "digvesh-singh-rathi-EOS",
+      "code": "EOS",
+      "displayName": "Digvesh Singh Rathi"
+    },
+    "54e52590": {
+      "slug": "vyshak-vijaykumar-24M",
+      "code": "24M",
+      "displayName": "Vyshak Vijaykumar"
+    },
+    "f986ca1a": {
+      "slug": "harshal-patel-4B",
+      "code": "4B",
+      "displayName": "Harshal Patel"
+    },
+    "7b679de5": {
+      "slug": "kartik-sharma-FSM",
+      "code": "FSM",
+      "displayName": "Kartik Sharma"
+    },
+    "765a4731": {
+      "slug": "mukesh-choudhary-5RX",
+      "code": "5RX",
+      "displayName": "Mukesh Choudhary"
+    },
+    "d7017798": {
+      "slug": "angkrish-raghuvanshi-7JC",
+      "code": "7JC",
+      "displayName": "Angkrish Raghuvanshi"
+    },
+    "d9273ee7": {
+      "slug": "marcus-stoinis-9J",
+      "code": "9J",
+      "displayName": "Marcus Stoinis"
+    },
+    "c05edf8e": {
+      "slug": "harpreet-brar-ER",
+      "code": "ER",
+      "displayName": "Harpreet Brar"
+    },
+    "64839cb3": {
+      "slug": "matheesha-pathirana-18E",
+      "code": "18E",
+      "displayName": "Matheesha Pathirana"
+    },
+    "c7a995d3": {
+      "slug": "sai-kishore-284",
+      "code": "284",
+      "displayName": "Sai Kishore"
+    },
+    "ebcfef83": {
+      "slug": "himmat-singh-EL",
+      "code": "EL",
+      "displayName": "Himmat Singh"
+    },
+    "944533a5": {
+      "slug": "karun-nair-7K",
+      "code": "7K",
+      "displayName": "Karun Nair"
+    },
+    "d1a60072": {
+      "slug": "nehal-wadhera-7D4",
+      "code": "7D4",
+      "displayName": "Nehal Wadhera"
+    },
+    "7dcb9bc9": {
+      "slug": "shahrukh-khan-3VF",
+      "code": "3VF",
+      "displayName": "Shahrukh Khan"
+    },
+    "d45c29b1": {
+      "slug": "ashwani-kumar-7D1",
+      "code": "7D1",
+      "displayName": "Ashwani Kumar"
+    },
+    "e5437608": {
+      "slug": "george-linde-126",
+      "code": "126",
+      "displayName": "George Linde"
+    },
+    "9e6032fa": {
+      "slug": "danish-malewar-FGK",
+      "code": "FGK",
+      "displayName": "Danish Malewar"
+    },
+    "b2b4f545": {
+      "slug": "ayush-mhatre-FCM",
+      "code": "FCM",
+      "displayName": "Ayush Mhatre"
     }
   },
   "bySlug": {
     "virat-kohli-4I": {
       "slug": "virat-kohli-4I",
       "code": "4I",
-      "displayName": "Virat KohliIMPACT"
+      "displayName": "Virat Kohli"
     },
     "rohit-sharma-2X": {
       "slug": "rohit-sharma-2X",
       "code": "2X",
-      "displayName": "Rohit SharmaIMPACT"
+      "displayName": "Rohit Sharma"
     },
     "shubman-gill-O5": {
       "slug": "shubman-gill-O5",
@@ -712,7 +942,7 @@
     "vaibhav-sooryavanshi-DBT": {
       "slug": "vaibhav-sooryavanshi-DBT",
       "code": "DBT",
-      "displayName": "Vaibhav SooryavanshiIMPACT"
+      "displayName": "Vaibhav Sooryavanshi"
     },
     "babar-azam-F2": {
       "slug": "babar-azam-F2",
@@ -762,7 +992,7 @@
     "ravindra-jadeja-7": {
       "slug": "ravindra-jadeja-7",
       "code": null,
-      "displayName": "Ravindra JadejaIMPACT"
+      "displayName": "Ravindra Jadeja"
     },
     "donovan-ferreira-2OT": {
       "slug": "donovan-ferreira-2OT",
@@ -782,7 +1012,7 @@
     "ravi-bishnoi-16E": {
       "slug": "ravi-bishnoi-16E",
       "code": "16E",
-      "displayName": "Ravi BishnoiIMPACT"
+      "displayName": "Ravi Bishnoi"
     },
     "nandre-burger-2OW": {
       "slug": "nandre-burger-2OW",
@@ -797,7 +1027,7 @@
     "sakib-hussain-A44": {
       "slug": "sakib-hussain-A44",
       "code": "A44",
-      "displayName": "Sakib HussainIMPACT"
+      "displayName": "Sakib Hussain"
     },
     "eshan-malinga-BUC": {
       "slug": "eshan-malinga-BUC",
@@ -817,12 +1047,12 @@
     "harsh-dubey-62Y": {
       "slug": "harsh-dubey-62Y",
       "code": "62Y",
-      "displayName": "Harsh DubeyIMPACT"
+      "displayName": "Harsh Dubey"
     },
     "finn-allen-4W4": {
       "slug": "finn-allen-4W4",
       "code": "4W4",
-      "displayName": "Finn AllenIMPACT"
+      "displayName": "Finn Allen"
     },
     "sunil-narine-5K": {
       "slug": "sunil-narine-5K",
@@ -837,7 +1067,7 @@
     "angkrish-raghuvanshi-7JC": {
       "slug": "angkrish-raghuvanshi-7JC",
       "code": "7JC",
-      "displayName": "Angkrish RaghuvanshiIMPACT"
+      "displayName": "Angkrish Raghuvanshi"
     },
     "rinku-singh-DR": {
       "slug": "rinku-singh-DR",
@@ -877,7 +1107,7 @@
     "akeal-hosein-21J": {
       "slug": "akeal-hosein-21J",
       "code": "21J",
-      "displayName": "Akeal HoseinIMPACT"
+      "displayName": "Akeal Hosein"
     },
     "noor-ahmad-174": {
       "slug": "noor-ahmad-174",
@@ -887,7 +1117,7 @@
     "gurjapneet-singh-6PW": {
       "slug": "gurjapneet-singh-6PW",
       "code": "6PW",
-      "displayName": "Gurjapneet SinghIMPACT"
+      "displayName": "Gurjapneet Singh"
     },
     "jamie-overton-1J4": {
       "slug": "jamie-overton-1J4",
@@ -912,7 +1142,7 @@
     "devdutt-padikkal-EI": {
       "slug": "devdutt-padikkal-EI",
       "code": "EI",
-      "displayName": "Devdutt PadikkalIMPACT"
+      "displayName": "Devdutt Padikkal"
     },
     "rajat-patidar-5S3": {
       "slug": "rajat-patidar-5S3",
@@ -927,7 +1157,7 @@
     "tim-david-2WT": {
       "slug": "tim-david-2WT",
       "code": "2WT",
-      "displayName": "Tim DavidIMPACT"
+      "displayName": "Tim David"
     },
     "romario-shepherd-1CR": {
       "slug": "romario-shepherd-1CR",
@@ -947,17 +1177,17 @@
     "digvesh-singh-rathi-EOS": {
       "slug": "digvesh-singh-rathi-EOS",
       "code": "EOS",
-      "displayName": "Digvesh Singh RathiIMPACT"
+      "displayName": "Digvesh Singh Rathi"
     },
     "avesh-khan-AZ": {
       "slug": "avesh-khan-AZ",
       "code": "AZ",
-      "displayName": "Avesh KhanIMPACT"
+      "displayName": "Avesh Khan"
     },
     "george-linde-126": {
       "slug": "george-linde-126",
       "code": "126",
-      "displayName": "George LindeIMPACT"
+      "displayName": "George Linde"
     },
     "krunal-pandya-CW": {
       "slug": "krunal-pandya-CW",
@@ -972,7 +1202,7 @@
     "rasikh-salam-EO": {
       "slug": "rasikh-salam-EO",
       "code": "EO",
-      "displayName": "Rasikh SalamIMPACT"
+      "displayName": "Rasikh Salam"
     },
     "josh-hazlewood-95": {
       "slug": "josh-hazlewood-95",
@@ -982,7 +1212,7 @@
     "priyansh-arya-7AR": {
       "slug": "priyansh-arya-7AR",
       "code": "7AR",
-      "displayName": "Priyansh AryaIMPACT"
+      "displayName": "Priyansh Arya"
     },
     "prabhsimran-singh-EN": {
       "slug": "prabhsimran-singh-EN",
@@ -1002,7 +1232,7 @@
     "marcus-stoinis-9J": {
       "slug": "marcus-stoinis-9J",
       "code": "9J",
-      "displayName": "Marcus StoinisIMPACT"
+      "displayName": "Marcus Stoinis"
     },
     "deepak-chahar-3U": {
       "slug": "deepak-chahar-3U",
@@ -1017,7 +1247,7 @@
     "allah-mohammad-ghazanfar-93C": {
       "slug": "allah-mohammad-ghazanfar-93C",
       "code": "93C",
-      "displayName": "Allah Mohammad GhazanfarIMPACT"
+      "displayName": "Allah Mohammad Ghazanfar"
     },
     "shardul-thakur-BG": {
       "slug": "shardul-thakur-BG",
@@ -1042,7 +1272,7 @@
     "vyshak-vijaykumar-24M": {
       "slug": "vyshak-vijaykumar-24M",
       "code": "24M",
-      "displayName": "Vyshak VijaykumarIMPACT"
+      "displayName": "Vyshak Vijaykumar"
     },
     "arshdeep-singh-E5": {
       "slug": "arshdeep-singh-E5",
@@ -1077,17 +1307,17 @@
     "rahul-tewatia-BK": {
       "slug": "rahul-tewatia-BK",
       "code": "BK",
-      "displayName": "Rahul TewatiaIMPACT"
+      "displayName": "Rahul Tewatia"
     },
     "shahrukh-khan-3VF": {
       "slug": "shahrukh-khan-3VF",
       "code": "3VF",
-      "displayName": "Shahrukh KhanIMPACT"
+      "displayName": "Shahrukh Khan"
     },
     "varun-chakaravarthy-EK": {
       "slug": "varun-chakaravarthy-EK",
       "code": "EK",
-      "displayName": "Varun ChakaravarthyIMPACT"
+      "displayName": "Varun Chakaravarthy"
     },
     "rashid-khan-CE": {
       "slug": "rashid-khan-CE",
@@ -1122,7 +1352,7 @@
     "karun-nair-7K": {
       "slug": "karun-nair-7K",
       "code": "7K",
-      "displayName": "Karun NairIMPACT"
+      "displayName": "Karun Nair"
     },
     "sameer-rizvi-135": {
       "slug": "sameer-rizvi-135",
@@ -1152,7 +1382,7 @@
     "auqib-nabi-60B": {
       "slug": "auqib-nabi-60B",
       "code": "60B",
-      "displayName": "Auqib NabiIMPACT"
+      "displayName": "Auqib Nabi"
     },
     "lungi-ngidi-DD": {
       "slug": "lungi-ngidi-DD",
@@ -1162,7 +1392,7 @@
     "kuldeep-yadav-75": {
       "slug": "kuldeep-yadav-75",
       "code": "75",
-      "displayName": "Kuldeep YadavIMPACT"
+      "displayName": "Kuldeep Yadav"
     },
     "t-natarajan-DS": {
       "slug": "t-natarajan-DS",
@@ -1182,7 +1412,7 @@
     "ayush-mhatre-FCM": {
       "slug": "ayush-mhatre-FCM",
       "code": "FCM",
-      "displayName": "Ayush MhatreIMPACT"
+      "displayName": "Ayush Mhatre"
     },
     "matthew-short-1YC": {
       "slug": "matthew-short-1YC",
@@ -1212,7 +1442,7 @@
     "mukesh-choudhary-5RX": {
       "slug": "mukesh-choudhary-5RX",
       "code": "5RX",
-      "displayName": "Mukesh ChoudharyIMPACT"
+      "displayName": "Mukesh Choudhary"
     },
     "tim-seifert-JX": {
       "slug": "tim-seifert-JX",
@@ -1222,7 +1452,7 @@
     "yash-punja-BO7": {
       "slug": "yash-punja-BO7",
       "code": "BO7",
-      "displayName": "Yash PunjaIMPACT"
+      "displayName": "Yash Punja"
     },
     "brijesh-sharma-K80": {
       "slug": "brijesh-sharma-K80",
@@ -1262,12 +1492,12 @@
     "himmat-singh-EL": {
       "slug": "himmat-singh-EL",
       "code": "EL",
-      "displayName": "Himmat SinghIMPACT"
+      "displayName": "Himmat Singh"
     },
     "manimaran-siddharth-4PA": {
       "slug": "manimaran-siddharth-4PA",
       "code": "4PA",
-      "displayName": "Manimaran SiddharthIMPACT"
+      "displayName": "Manimaran Siddharth"
     },
     "krish-bhagat-BX5": {
       "slug": "krish-bhagat-BX5",
@@ -1277,7 +1507,7 @@
     "ashwani-kumar-7D1": {
       "slug": "ashwani-kumar-7D1",
       "code": "7D1",
-      "displayName": "Ashwani KumarIMPACT"
+      "displayName": "Ashwani Kumar"
     },
     "mitchell-santner-BR": {
       "slug": "mitchell-santner-BR",
@@ -1292,17 +1522,17 @@
     "ashutosh-sharma-5SI": {
       "slug": "ashutosh-sharma-5SI",
       "code": "5SI",
-      "displayName": "Ashutosh SharmaIMPACT"
+      "displayName": "Ashutosh Sharma"
     },
     "dilshan-madushanka-17J": {
       "slug": "dilshan-madushanka-17J",
       "code": "17J",
-      "displayName": "Dilshan MadushankaIMPACT"
+      "displayName": "Dilshan Madushanka"
     },
     "mayank-yadav-7RU": {
       "slug": "mayank-yadav-7RU",
       "code": "7RU",
-      "displayName": "Mayank YadavIMPACT"
+      "displayName": "Mayank Yadav"
     },
     "mohsin-khan-1DG": {
       "slug": "mohsin-khan-1DG",
@@ -1317,7 +1547,7 @@
     "danish-malewar-FGK": {
       "slug": "danish-malewar-FGK",
       "code": "FGK",
-      "displayName": "Danish MalewarIMPACT"
+      "displayName": "Danish Malewar"
     },
     "naman-dhir-AXL": {
       "slug": "naman-dhir-AXL",
@@ -1342,7 +1572,7 @@
     "jacob-bethell-6K0": {
       "slug": "jacob-bethell-6K0",
       "code": "6K0",
-      "displayName": "Jacob BethellIMPACT"
+      "displayName": "Jacob Bethell"
     },
     "jason-holder-9P": {
       "slug": "jason-holder-9P",
@@ -1352,7 +1582,7 @@
     "prasidh-krishna-EF": {
       "slug": "prasidh-krishna-EF",
       "code": "EF",
-      "displayName": "Prasidh KrishnaIMPACT"
+      "displayName": "Prasidh Krishna"
     },
     "manav-suthar-7OY": {
       "slug": "manav-suthar-7OY",
@@ -1362,7 +1592,7 @@
     "nehal-wadhera-7D4": {
       "slug": "nehal-wadhera-7D4",
       "code": "7D4",
-      "displayName": "Nehal WadheraIMPACT"
+      "displayName": "Nehal Wadhera"
     },
     "mukesh-kumar-5KZ": {
       "slug": "mukesh-kumar-5KZ",
@@ -1377,7 +1607,7 @@
     "travis-head-9O": {
       "slug": "travis-head-9O",
       "code": "9O",
-      "displayName": "Travis HeadIMPACT"
+      "displayName": "Travis Head"
     },
     "ishan-kishan-CM": {
       "slug": "ishan-kishan-CM",
@@ -1437,17 +1667,17 @@
     "kartik-sharma-FSM": {
       "slug": "kartik-sharma-FSM",
       "code": "FSM",
-      "displayName": "Kartik SharmaIMPACT"
+      "displayName": "Kartik Sharma"
     },
     "raghu-sharma-5VO": {
       "slug": "raghu-sharma-5VO",
       "code": "5VO",
-      "displayName": "Raghu SharmaIMPACT"
+      "displayName": "Raghu Sharma"
     },
     "prashant-veer-C9N": {
       "slug": "prashant-veer-C9N",
       "code": "C9N",
-      "displayName": "Prashant VeerIMPACT"
+      "displayName": "Prashant Veer"
     },
     "ramakrishna-ghosh-A0E": {
       "slug": "ramakrishna-ghosh-A0E",
@@ -1457,7 +1687,7 @@
     "harshal-patel-4B": {
       "slug": "harshal-patel-4B",
       "code": "4B",
-      "displayName": "Harshal PatelIMPACT"
+      "displayName": "Harshal Patel"
     },
     "manish-pandey-3D": {
       "slug": "manish-pandey-3D",
@@ -1477,7 +1707,7 @@
     "saurabh-dubey-62M": {
       "slug": "saurabh-dubey-62M",
       "code": "62M",
-      "displayName": "Saurabh DubeyIMPACT"
+      "displayName": "Saurabh Dubey"
     },
     "spencer-johnson-5F9": {
       "slug": "spencer-johnson-5F9",
@@ -1512,12 +1742,12 @@
     "dasun-shanaka-K2": {
       "slug": "dasun-shanaka-K2",
       "code": "K2",
-      "displayName": "Dasun ShanakaIMPACT"
+      "displayName": "Dasun Shanaka"
     },
     "shubham-dubey-650": {
       "slug": "shubham-dubey-650",
       "code": "650",
-      "displayName": "Shubham DubeyIMPACT"
+      "displayName": "Shubham Dubey"
     },
     "lockie-ferguson-DC": {
       "slug": "lockie-ferguson-DC",
@@ -1527,7 +1757,7 @@
     "harpreet-brar-ER": {
       "slug": "harpreet-brar-ER",
       "code": "ER",
-      "displayName": "Harpreet BrarIMPACT"
+      "displayName": "Harpreet Brar"
     },
     "abishek-porel-87L": {
       "slug": "abishek-porel-87L",
@@ -1547,7 +1777,7 @@
     "yash-ravisingh-thakur-5UZ": {
       "slug": "yash-ravisingh-thakur-5UZ",
       "code": "5UZ",
-      "displayName": "Yash Ravisingh ThakurIMPACT"
+      "displayName": "Yash Ravisingh Thakur"
     },
     "ben-dwarshuis-1YH": {
       "slug": "ben-dwarshuis-1YH",
@@ -1572,7 +1802,7 @@
     "josh-inglis-20O": {
       "slug": "josh-inglis-20O",
       "code": "20O",
-      "displayName": "Josh InglisIMPACT"
+      "displayName": "Josh Inglis"
     },
     "abdul-samad-4P7": {
       "slug": "abdul-samad-4P7",
@@ -1597,12 +1827,12 @@
     "matheesha-pathirana-18E": {
       "slug": "matheesha-pathirana-18E",
       "code": "18E",
-      "displayName": "Matheesha PathiranaIMPACT"
+      "displayName": "Matheesha Pathirana"
     },
     "sai-kishore-284": {
       "slug": "sai-kishore-284",
       "code": "284",
-      "displayName": "Sai KishoreIMPACT"
+      "displayName": "Sai Kishore"
     },
     "adam-milne-8B": {
       "slug": "adam-milne-8B",
@@ -1652,7 +1882,7 @@
     "zaheer-shaikh-NTL": {
       "slug": "zaheer-shaikh-NTL",
       "code": "NTL",
-      "displayName": "Zaheer ShaikhIMPACT"
+      "displayName": "Zaheer Shaikh"
     },
     "gursimran-singh-BZJ": {
       "slug": "gursimran-singh-BZJ",
