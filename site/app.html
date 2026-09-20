@@ -1,0 +1,1013 @@
+<meta charset="utf-8">
+<title>Twelfth Man</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600&display=swap">
+
+<style>
+  /* ================================================================
+     Twelfth Man — an IPL-squad tracker.
+
+     Identity: the shared chrome is IPL navy + gold; anything scoped to
+     a franchise takes that franchise's colours through --team tokens,
+     so selecting Mumbai turns the working surface Mumbai blue.
+
+     Type: Barlow Condensed for the sporting display voice (scoreboard
+     lineage, condensed like a team sheet), Inter for UI and reading,
+     Roboto Mono for every figure — cricket numbers belong in tabular
+     columns and must line up.
+     ================================================================ */
+
+  :root {
+    --ipl-navy: #0A2240;
+    --ipl-navy-2: #123561;
+    --ipl-gold: #D6AF3F;
+
+    --bg: #F2F1ED;
+    --panel: #FFFFFF;
+    --panel-2: #F7F6F2;
+    --sunk: #E9E7E1;
+    --ink: #14181F;
+    --ink-2: #4B5563;
+    --ink-3: #8A93A1;
+    --rule: #E0DDD5;
+    --rule-2: #CBC7BC;
+
+    --good: #12784C;
+    --good-bg: #E4F2EA;
+    --bad: #B23A2E;
+    --warn: #A96C12;
+    --live: #D0342C;
+
+    --team: var(--ipl-navy);
+    --team-2: var(--ipl-gold);
+    --team-ink: #FFFFFF;
+
+    --shadow-1: 0 1px 2px rgba(10, 34, 64, .06);
+    --shadow-2: 0 4px 12px -4px rgba(10, 34, 64, .16), 0 16px 40px -20px rgba(10, 34, 64, .3);
+
+    --r: 6px;
+    --sidebar: 268px;
+
+    --f-xs: 11px;
+    --f-sm: 12.5px;
+    --f-md: 14px;
+    --f-lg: 16px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0C1117;
+      --panel: #151C25;
+      --panel-2: #1B2430;
+      --sunk: #101720;
+      --ink: #E8ECF2;
+      --ink-2: #A3AEBD;
+      --ink-3: #6F7C8D;
+      --rule: #242F3D;
+      --rule-2: #33404F;
+      --good: #43BE86;
+      --good-bg: #113526;
+      --bad: #E4705F;
+      --warn: #D9A55A;
+      --live: #F2564B;
+      --shadow-1: 0 1px 2px rgba(0,0,0,.4);
+      --shadow-2: 0 4px 14px -4px rgba(0,0,0,.6), 0 20px 50px -24px rgba(0,0,0,.9);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0C1117;
+    --panel: #151C25;
+    --panel-2: #1B2430;
+    --sunk: #101720;
+    --ink: #E8ECF2;
+    --ink-2: #A3AEBD;
+    --ink-3: #6F7C8D;
+    --rule: #242F3D;
+    --rule-2: #33404F;
+    --good: #43BE86;
+    --good-bg: #113526;
+    --bad: #E4705F;
+    --warn: #D9A55A;
+    --live: #F2564B;
+    --shadow-1: 0 1px 2px rgba(0,0,0,.4);
+    --shadow-2: 0 4px 14px -4px rgba(0,0,0,.6), 0 20px 50px -24px rgba(0,0,0,.9);
+  }
+
+  /* Franchise palettes */
+  [data-team="Chennai Super Kings"]         { --team:#D89A00; --team-2:#1A4FA0; --team-ink:#1A1300; }
+  [data-team="Delhi Capitals"]              { --team:#17449B; --team-2:#D6202F; --team-ink:#fff; }
+  [data-team="Gujarat Titans"]              { --team:#1B2A4A; --team-2:#C6A04A; --team-ink:#fff; }
+  [data-team="Kolkata Knight Riders"]       { --team:#4A2A7A; --team-2:#D4AF37; --team-ink:#fff; }
+  [data-team="Lucknow Super Giants"]        { --team:#0A62B5; --team-2:#E8842B; --team-ink:#fff; }
+  [data-team="Mumbai Indians"]              { --team:#0A50A1; --team-2:#C6A04A; --team-ink:#fff; }
+  [data-team="Punjab Kings"]                { --team:#C4161C; --team-2:#B9BDC2; --team-ink:#fff; }
+  [data-team="Rajasthan Royals"]            { --team:#CE1A6F; --team-2:#1B2A4A; --team-ink:#fff; }
+  [data-team="Royal Challengers Bengaluru"] { --team:#BE1428; --team-2:#161616; --team-ink:#fff; }
+  [data-team="Sunrisers Hyderabad"]         { --team:#DB5514; --team-2:#1B2A4A; --team-ink:#fff; }
+
+  :root[data-theme="dark"] [data-team="Chennai Super Kings"] { --team:#EFB61E; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) [data-team="Chennai Super Kings"] { --team:#EFB61E; }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: var(--f-md);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .cond { font-family: "Barlow Condensed", Inter, sans-serif; }
+  .mono, .num {
+    font-family: "Roboto Mono", ui-monospace, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  button, input, select { font: inherit; color: inherit; }
+
+  /* ---------- shell ---------- */
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar) minmax(0, 1fr);
+    min-height: 100%;
+  }
+
+  /* ---------- sidebar ---------- */
+  .side {
+    background: var(--ipl-navy);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .side-head {
+    padding: 18px 18px 14px;
+    border-bottom: 1px solid rgba(255,255,255,.12);
+    flex: none;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0 0 3px;
+    font-family: "Barlow Condensed", sans-serif;
+    font-weight: 700;
+    font-size: 25px;
+    line-height: 1;
+    letter-spacing: .01em;
+    text-transform: uppercase;
+  }
+  .logo .mark {
+    width: 26px; height: 26px;
+    flex: none;
+    border-radius: 3px;
+    background: var(--ipl-gold);
+    color: var(--ipl-navy);
+    display: grid;
+    place-items: center;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .logo span { color: var(--ipl-gold); }
+
+  .tagline {
+    margin: 0;
+    font-size: var(--f-xs);
+    color: #93A6C0;
+    letter-spacing: .02em;
+  }
+
+  .side-search {
+    padding: 12px 14px;
+    flex: none;
+  }
+  .side-search input {
+    width: 100%;
+    background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: var(--r);
+    padding: 8px 11px;
+    color: #fff;
+    font-size: var(--f-sm);
+    outline: none;
+  }
+  .side-search input::placeholder { color: #8296B2; }
+  .side-search input:focus {
+    border-color: var(--ipl-gold);
+    background: rgba(255,255,255,.12);
+  }
+
+  .teams-scroll {
+    overflow-y: auto;
+    flex: 1;
+    padding: 0 8px 16px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,.2) transparent;
+  }
+
+  .team-block { margin-bottom: 2px; }
+
+  .team-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    background: none;
+    border: 0;
+    border-radius: var(--r);
+    color: #D7E0EC;
+    cursor: pointer;
+    text-align: left;
+    font-size: var(--f-sm);
+    font-weight: 500;
+  }
+  .team-btn:hover { background: rgba(255,255,255,.07); color: #fff; }
+  .team-btn[aria-expanded="true"] { background: rgba(255,255,255,.1); color: #fff; }
+  .team-btn:focus-visible { outline: 2px solid var(--ipl-gold); outline-offset: -2px; }
+
+  .swatch {
+    width: 4px;
+    height: 20px;
+    border-radius: 2px;
+    background: var(--team);
+    flex: none;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.18);
+  }
+  .team-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .team-count {
+    font-family: "Roboto Mono", monospace;
+    font-size: 10.5px;
+    color: #8296B2;
+  }
+  .chev { transition: transform .18s ease; flex: none; opacity: .6; }
+  .team-btn[aria-expanded="true"] .chev { transform: rotate(90deg); }
+
+  .squad { display: none; padding: 2px 0 6px 21px; }
+  .squad.open { display: block; }
+
+  .sq-player {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 9px;
+    background: none;
+    border: 0;
+    border-left: 2px solid rgba(255,255,255,.12);
+    color: #AEBDD0;
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .sq-player:hover { color: #fff; border-left-color: var(--team); background: rgba(255,255,255,.05); }
+  .sq-player[aria-current="true"] {
+    color: #fff;
+    background: var(--team);
+    border-left-color: var(--team-2);
+    font-weight: 600;
+  }
+  .sq-player:focus-visible { outline: 2px solid var(--ipl-gold); outline-offset: -2px; }
+  .sq-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sq-flag {
+    font-family: "Roboto Mono", monospace;
+    font-size: 9.5px;
+    padding: 1px 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,.14);
+    letter-spacing: .03em;
+  }
+  .sq-player[data-idle="true"] .sq-name { opacity: .5; }
+  /* A player who left the squad mid-season is still tracked — marked, not hidden. */
+  .sq-out {
+    font-family: "Roboto Mono", monospace;
+    font-size: 8.5px;
+    font-weight: 600;
+    padding: 1px 4px;
+    border-radius: 2px;
+    background: rgba(214,175,63,.22);
+    color: var(--ipl-gold);
+    letter-spacing: .06em;
+  }
+  .sq-player[data-status="replaced"] .sq-name { font-style: italic; }
+
+  /* ---------- main ---------- */
+  .main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .topbar {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 15;
+    background: color-mix(in srgb, var(--bg) 93%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--rule);
+    padding: 11px 22px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .tabs { display: flex; gap: 2px; }
+  .tab {
+    font-family: "Barlow Condensed", sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: 7px 14px;
+    background: none;
+    border: 0;
+    border-radius: var(--r);
+    color: var(--ink-3);
+    cursor: pointer;
+  }
+  .tab:hover { color: var(--ink); background: var(--sunk); }
+  .tab[aria-selected="true"] { background: var(--ipl-navy); color: #fff; }
+  .tab:focus-visible { outline: 2px solid var(--ipl-gold); outline-offset: 1px; }
+
+  .fmt { display: flex; gap: 1px; margin-left: auto; border: 1px solid var(--rule-2); border-radius: var(--r); overflow: hidden; }
+  .fmt button {
+    font-family: "Roboto Mono", monospace;
+    font-size: var(--f-xs);
+    font-weight: 500;
+    padding: 6px 11px;
+    background: var(--panel);
+    border: 0;
+    color: var(--ink-2);
+    cursor: pointer;
+    letter-spacing: .02em;
+  }
+  .fmt button + button { border-left: 1px solid var(--rule); }
+  .fmt button[aria-pressed="true"] { background: var(--ipl-navy); color: #fff; }
+  .fmt button:focus-visible { outline: 2px solid var(--ipl-gold); outline-offset: -2px; }
+
+  .content { padding: 20px 22px 60px; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: var(--r);
+    box-shadow: var(--shadow-1);
+  }
+
+  .sect-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 0 0 12px;
+    flex-wrap: wrap;
+  }
+  .sect-head h2 {
+    font-family: "Barlow Condensed", sans-serif;
+    font-size: 21px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    margin: 0;
+  }
+  .sect-head .sub { font-size: var(--f-sm); color: var(--ink-3); }
+  .outfilter {
+    margin-left: auto;
+    font-size: var(--f-xs);
+    font-family: "Roboto Mono", monospace;
+    padding: 5px 10px;
+    border: 1px solid var(--rule-2);
+    border-radius: var(--r);
+    background: var(--panel);
+    color: var(--ink-2);
+    cursor: pointer;
+    letter-spacing: .03em;
+  }
+  .outfilter:hover { background: var(--sunk); color: var(--ink); }
+  .outfilter[aria-pressed="true"] { background: var(--ipl-gold); border-color: var(--ipl-gold); color: #241B00; font-weight: 600; }
+  .outfilter:focus-visible { outline: 2px solid var(--ipl-navy); outline-offset: 1px; }
+  .card[data-status="replaced"] { border-style: dashed; }
+
+  /* ---------- daily tracker ---------- */
+  .daynav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .daynav button {
+    padding: 7px 12px;
+    background: var(--panel);
+    border: 1px solid var(--rule-2);
+    border-radius: var(--r);
+    cursor: pointer;
+    font-size: var(--f-sm);
+    color: var(--ink-2);
+  }
+  .daynav button:hover:not(:disabled) { background: var(--sunk); color: var(--ink); }
+  .daynav button:disabled { opacity: .4; cursor: default; }
+  .daynav .today {
+    font-family: "Barlow Condensed", sans-serif;
+    font-size: 19px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    padding: 0 4px;
+  }
+  .daynav select { padding: 7px 10px; border: 1px solid var(--rule-2); border-radius: var(--r); background: var(--panel); font-size: var(--f-sm); }
+
+  .dayrow {
+    display: grid;
+    grid-template-columns: 4px minmax(0, 1.6fr) minmax(0, 1.5fr) auto;
+    gap: 0 14px;
+    align-items: center;
+    padding: 0;
+    border-bottom: 1px solid var(--rule);
+    background: var(--panel);
+    width: 100%;
+    border-left: 0; border-right: 0; border-top: 0;
+    text-align: left;
+    cursor: pointer;
+  }
+  .dayrow:last-child { border-bottom: 0; }
+  .dayrow:hover { background: var(--panel-2); }
+  .dayrow:focus-visible { outline: 2px solid var(--team); outline-offset: -2px; }
+  .dayrow .rail { background: var(--team); align-self: stretch; }
+  .dayrow .who { padding: 11px 0; min-width: 0; }
+  .dayrow .pn { font-weight: 600; font-size: var(--f-md); }
+  .dayrow .pt { font-size: var(--f-xs); color: var(--team); font-weight: 600; }
+  :root[data-theme="dark"] .dayrow .pt { color: color-mix(in srgb, var(--team) 68%, #fff); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .dayrow .pt { color: color-mix(in srgb, var(--team) 68%, #fff); }
+  }
+  .dayrow .fix { padding: 11px 0; font-size: var(--f-sm); color: var(--ink-2); min-width: 0; }
+  .dayrow .fix b { display: block; color: var(--ink); font-weight: 600; font-size: var(--f-sm); }
+  .dayrow .out { padding: 11px 16px 11px 0; text-align: right; white-space: nowrap; }
+
+  .score { font-family: "Roboto Mono", monospace; font-variant-numeric: tabular-nums; font-weight: 600; font-size: 15px; }
+  .score.big { color: var(--good); }
+  .score.duck { color: var(--ink-3); font-weight: 400; }
+  .bowlfig { font-family: "Roboto Mono", monospace; font-size: var(--f-sm); color: var(--ink-2); display: block; }
+  .bowlfig.haul { color: var(--good); font-weight: 600; }
+
+  .fmt-chip {
+    display: inline-block;
+    font-family: "Roboto Mono", monospace;
+    font-size: 9.5px;
+    font-weight: 500;
+    padding: 2px 5px;
+    border-radius: 2px;
+    background: var(--sunk);
+    color: var(--ink-2);
+    letter-spacing: .04em;
+    vertical-align: 1px;
+  }
+  .fmt-chip.T20 { background: #E8F0FB; color: #1D4E9A; }
+  .fmt-chip.ODI { background: #FDF0E2; color: #97600F; }
+  .fmt-chip.Test { background: #EBE8F6; color: #4F3C93; }
+  :root[data-theme="dark"] .fmt-chip.T20 { background: #16283F; color: #7FB0EE; }
+  :root[data-theme="dark"] .fmt-chip.ODI { background: #33260F; color: #E0B265; }
+  :root[data-theme="dark"] .fmt-chip.Test { background: #241E3D; color: #A796E8; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .fmt-chip.T20 { background:#16283F; color:#7FB0EE; }
+    :root:not([data-theme="light"]) .fmt-chip.ODI { background:#33260F; color:#E0B265; }
+    :root:not([data-theme="light"]) .fmt-chip.Test { background:#241E3D; color:#A796E8; }
+  }
+
+  /* ---------- player view ---------- */
+  .p-head {
+    background: var(--team);
+    color: var(--team-ink);
+    border-radius: var(--r) var(--r) 0 0;
+    padding: 20px 22px;
+    border-bottom: 3px solid var(--team-2);
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .p-head h2 {
+    font-family: "Barlow Condensed", sans-serif;
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .01em;
+    line-height: .95;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .p-meta { font-family: "Roboto Mono", monospace; font-size: var(--f-xs); opacity: .9; margin-top: 6px; letter-spacing: .02em; }
+  .p-badges { display: flex; gap: 6px; margin-top: 9px; flex-wrap: wrap; }
+  .p-badge {
+    font-family: "Roboto Mono", monospace;
+    font-size: 10px;
+    padding: 3px 7px;
+    border-radius: 2px;
+    background: rgba(255,255,255,.2);
+    letter-spacing: .04em;
+  }
+  .p-badge.alert {
+    background: var(--ipl-gold);
+    color: #241B00;
+    font-weight: 600;
+  }
+
+  .p-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+  .p-stats div { background: var(--panel); padding: 13px 16px; }
+  .p-stats b {
+    display: block;
+    font-family: "Roboto Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+  .p-stats span {
+    font-family: "Barlow Condensed", sans-serif;
+    font-size: var(--f-xs);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--ink-3);
+    font-weight: 600;
+  }
+
+  /* form strip: last 10 innings as bars */
+  .form-strip { padding: 16px 20px; border-bottom: 1px solid var(--rule); }
+  .form-label {
+    font-family: "Barlow Condensed", sans-serif;
+    font-size: var(--f-xs);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--ink-3);
+    font-weight: 600;
+    margin-bottom: 9px;
+  }
+  .bars { display: flex; align-items: flex-end; gap: 5px; height: 62px; }
+  .bar-wrap { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; min-width: 0; }
+  .bar {
+    width: 100%;
+    background: var(--team);
+    border-radius: 2px 2px 0 0;
+    min-height: 3px;
+    opacity: .85;
+  }
+  .bar.duck { background: var(--rule-2); }
+  .bar.nobat { background: none; border-top: 2px dotted var(--rule-2); }
+  .bar.fifty { opacity: 1; box-shadow: inset 0 -3px 0 var(--team-2); }
+  .bar-val { font-family: "Roboto Mono", monospace; font-size: 9.5px; color: var(--ink-3); }
+
+  .log { max-height: 460px; overflow-y: auto; }
+  .log table { width: 100%; border-collapse: collapse; }
+  .log th {
+    position: sticky; top: 0;
+    background: var(--panel-2);
+    font-family: "Barlow Condensed", sans-serif;
+    font-size: var(--f-xs);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ink-3);
+    font-weight: 600;
+    text-align: left;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  .log td { padding: 10px 16px; border-bottom: 1px solid var(--rule); font-size: var(--f-sm); }
+  .log tr:last-child td { border-bottom: 0; }
+  .log .d { font-family: "Roboto Mono", monospace; color: var(--ink-3); white-space: nowrap; font-size: var(--f-xs); }
+  .log .m b { display: block; font-weight: 600; color: var(--ink); }
+  .log .m span { color: var(--ink-2); font-size: var(--f-xs); }
+  .log .r { text-align: right; white-space: nowrap; }
+
+  .empty { padding: 44px 20px; text-align: center; color: var(--ink-3); }
+  .empty b { display: block; font-family: "Barlow Condensed", sans-serif; font-size: 18px; color: var(--ink); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+
+  /* ---------- roster grid ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+    gap: 10px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--team);
+    border-radius: var(--r);
+    padding: 12px 14px;
+    cursor: pointer;
+    text-align: left;
+    box-shadow: var(--shadow-1);
+  }
+  .card:hover { background: var(--panel-2); }
+  .card:focus-visible { outline: 2px solid var(--team); outline-offset: 1px; }
+  .card h3 { margin: 0; font-size: var(--f-md); font-weight: 600; }
+  .card .ct { font-size: var(--f-xs); color: var(--team); font-weight: 600; margin-top: 1px; }
+  :root[data-theme="dark"] .card .ct { color: color-mix(in srgb, var(--team) 70%, #fff); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .card .ct { color: color-mix(in srgb, var(--team) 70%, #fff); }
+  }
+  .card .cf { display: flex; gap: 14px; margin-top: 9px; }
+  .card .cf div b { display: block; font-family: "Roboto Mono", monospace; font-variant-numeric: tabular-nums; font-size: var(--f-lg); font-weight: 600; line-height: 1; }
+  .card .cf div span { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); font-family: "Barlow Condensed", sans-serif; font-weight: 600; }
+  .card .cz b { color: var(--ink-3); font-weight: 400; }
+
+  .mobile-side { display: none; }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    .side {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: 280px;
+      z-index: 60;
+      transform: translateX(-100%);
+      transition: transform .22s ease;
+      box-shadow: var(--shadow-2);
+    }
+    .side.open { transform: none; }
+    .mobile-side {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      background: var(--ipl-navy);
+      color: #fff;
+      border: 0;
+      border-radius: var(--r);
+      cursor: pointer;
+      font-size: var(--f-sm);
+    }
+    .scrim { position: fixed; inset: 0; background: rgba(6,14,26,.5); z-index: 55; }
+    .content { padding: 16px 14px 56px; }
+    .topbar { padding: 10px 14px; }
+    .dayrow { grid-template-columns: 4px minmax(0,1fr) auto; }
+    .dayrow .fix { grid-column: 2; padding-top: 0; }
+    .dayrow .who { padding-bottom: 2px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="shell">
+  <aside class="side" id="side">
+    <div class="side-head">
+      <h1 class="logo"><span class="mark">12</span>Twelfth <span>Man</span></h1>
+      <p class="tagline">IPL squads, tracked worldwide</p>
+    </div>
+    <div class="side-search">
+      <input id="psearch" type="search" placeholder="Search players…" autocomplete="off" aria-label="Search players">
+    </div>
+    <nav class="teams-scroll" id="teamNav" aria-label="Franchises"></nav>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <button class="mobile-side" id="sideToggle" aria-label="Open squads">☰ Squads</button>
+      <div class="tabs" role="tablist">
+        <button class="tab" id="tabDaily" role="tab" aria-selected="true">Daily</button>
+        <button class="tab" id="tabSquad" role="tab" aria-selected="false">Squads</button>
+      </div>
+      <div class="fmt" role="group" aria-label="Format">
+        <button data-fmt="" aria-pressed="true">ALL</button>
+        <button data-fmt="T20" aria-pressed="false">T20</button>
+        <button data-fmt="ODI" aria-pressed="false">ODI</button>
+        <button data-fmt="Test" aria-pressed="false">TEST</button>
+      </div>
+    </div>
+    <div class="content" id="view"></div>
+  </div>
+</div>
+
+<script>
+const IPL = 'Indian Premier League';
+const S = { tab: 'daily', team: '', player: null, fmt: '', q: '', dayIdx: 0, onlyOut: false };
+let PLAYERS = [], PERFS = [], DAYS = [], META = {}, byPlayer = new Map(), byDate = new Map();
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const team1 = (p) => p.iplTeams?.[0] || '';
+
+function shortComp(c) {
+  if (c === IPL) return 'IPL';
+  return c.replace(/^ICC Men's /, '').replace(/ Sub Regional.*$/, ' Qual.')
+          .replace(/ tour of /, ' in ').replace(/^Big Bash League$/, 'BBL')
+          .replace(/ T20I Series$/, '').replace(/ Tri-Series$/, ' Tri');
+}
+function fmtDay(d) {
+  const [y, m, dd] = d.split('-');
+  return `${+dd} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]}`;
+}
+function fmtLong(d) {
+  const dt = new Date(d + 'T00:00:00');
+  return dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long' });
+}
+
+function matchesFmt(p) { return !S.fmt || p.format === S.fmt; }
+
+function boot() {
+  const d = window.__DATA__;
+  PLAYERS = d.players; PERFS = d.perfs; DAYS = d.days; META = d.meta;
+  for (const p of PERFS) {
+    if (!byPlayer.has(p.playerId)) byPlayer.set(p.playerId, []);
+    byPlayer.get(p.playerId).push(p);
+    if (!byDate.has(p.date)) byDate.set(p.date, []);
+    byDate.get(p.date).push(p);
+  }
+  for (const list of byPlayer.values()) list.sort((a, b) => b.date.localeCompare(a.date));
+  renderSidebar();
+  render();
+}
+
+/* ---------------- sidebar ---------------- */
+function renderSidebar() {
+  const teams = [...new Set(PLAYERS.map(team1).filter(Boolean))].sort();
+  const q = S.q.trim().toLowerCase();
+
+  $('teamNav').innerHTML = teams.map((t) => {
+    let squad = PLAYERS.filter((p) => team1(p) === t);
+    if (q) squad = squad.filter((p) => p.name.toLowerCase().includes(q));
+    if (q && !squad.length) return '';
+    const open = S.team === t || (q && squad.length);
+
+    return `<div class="team-block" data-team="${esc(t)}">
+      <button class="team-btn" data-t="${esc(t)}" aria-expanded="${open}">
+        <span class="swatch"></span>
+        <span class="team-name">${esc(t)}</span>
+        <span class="team-count">${squad.length}</span>
+        <svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
+      <div class="squad${open ? ' open' : ''}">
+        ${squad.map((p) => `
+          <button class="sq-player" data-id="${esc(p.id ?? '')}" data-idle="${p.innings === 0}"
+                  data-status="${esc(p.squadStatus ?? 'active')}"
+                  aria-current="${S.player === p.id}"
+                  title="${p.squadStatus === 'replaced' ? 'Left the squad mid-season — still tracked' : ''}">
+            <span class="sq-name">${esc(p.name)}</span>
+            ${p.squadStatus === 'replaced' ? '<span class="sq-out" aria-label="left squad">OUT</span>' : ''}
+            ${p.innings ? `<span class="sq-flag">${p.innings}</span>` : ''}
+          </button>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+$('teamNav').addEventListener('click', (e) => {
+  const tb = e.target.closest('.team-btn');
+  if (tb) {
+    S.team = S.team === tb.dataset.t ? '' : tb.dataset.t;
+    renderSidebar();
+    return;
+  }
+  const pb = e.target.closest('.sq-player');
+  if (pb?.dataset.id) {
+    S.player = pb.dataset.id;
+    S.tab = 'player';
+    $('side').classList.remove('open');
+    document.querySelector('.scrim')?.remove();
+    renderSidebar();
+    render();
+  }
+});
+
+$('psearch').addEventListener('input', (e) => { S.q = e.target.value; renderSidebar(); });
+
+/* ---------------- render ---------------- */
+function render() {
+  $('tabDaily').setAttribute('aria-selected', String(S.tab === 'daily'));
+  $('tabSquad').setAttribute('aria-selected', String(S.tab === 'squad'));
+  if (S.tab === 'daily') renderDaily();
+  else if (S.tab === 'player') renderPlayer();
+  else renderSquad();
+}
+
+/* ---- daily tracker ---- */
+function renderDaily() {
+  const days = DAYS.filter((d) => byDate.get(d.date)?.some(matchesFmt));
+  if (!days.length) {
+    $('view').innerHTML = `<div class="panel empty"><b>No play in this format</b>Try a different format filter.</div>`;
+    return;
+  }
+  const idx = Math.min(S.dayIdx, days.length - 1);
+  const day = days[idx];
+  const rows = (byDate.get(day.date) ?? []).filter(matchesFmt);
+
+  const opts = days.map((d, i) =>
+    `<option value="${i}" ${i === idx ? 'selected' : ''}>${fmtLong(d.date)} — ${d.players} player${d.players === 1 ? '' : 's'}</option>`).join('');
+
+  $('view').innerHTML = `
+    <div class="daynav">
+      <button id="dNewer" ${idx === 0 ? 'disabled' : ''}>← Newer</button>
+      <span class="today cond">${fmtLong(day.date)}</span>
+      <button id="dOlder" ${idx >= days.length - 1 ? 'disabled' : ''}>Older →</button>
+      <select id="dPick" aria-label="Jump to a date">${opts}</select>
+    </div>
+    <div class="sect-head">
+      <h2>Who played</h2>
+      <span class="sub">${rows.length} innings from ${new Set(rows.map((r) => r.playerId)).size} tracked players</span>
+    </div>
+    <div class="panel">
+      ${rows.sort(sortByImpact).map(dayRow).join('')}
+    </div>`;
+
+  $('dNewer').onclick = () => { S.dayIdx = Math.max(0, idx - 1); render(); };
+  $('dOlder').onclick = () => { S.dayIdx = idx + 1; render(); };
+  $('dPick').onchange = (e) => { S.dayIdx = +e.target.value; render(); };
+
+  $('view').querySelectorAll('.dayrow').forEach((r) => {
+    r.onclick = () => { S.player = r.dataset.id; S.tab = 'player'; renderSidebar(); render(); };
+  });
+}
+
+function sortByImpact(a, b) {
+  const score = (r) => (r.batting?.runs ?? 0) + (r.bowling?.wickets ?? 0) * 25;
+  return score(b) - score(a);
+}
+
+function dayRow(r) {
+  const p = PLAYERS.find((x) => x.id === r.playerId);
+  const t = p ? team1(p) : '';
+  const b = r.batting, w = r.bowling;
+  const bat = b && b.balls
+    ? `<span class="score ${b.runs >= 50 ? 'big' : b.runs === 0 ? 'duck' : ''}">${b.runs}${b.out ? '' : '*'} (${b.balls})</span>`
+    : '';
+  const bowl = w && w.balls
+    ? `<span class="bowlfig ${w.wickets >= 3 ? 'haul' : ''}">${w.overs}–${w.runs}–${w.wickets}</span>`
+    : '';
+  return `<button class="dayrow" data-team="${esc(t)}" data-id="${esc(r.playerId)}">
+    <span class="rail"></span>
+    <span class="who">
+      <span class="pn">${esc(p?.name ?? r.name)}</span>
+      <span class="pt">${esc(t || '—')}</span>
+    </span>
+    <span class="fix">
+      <b>${esc(shortComp(r.competition))} <span class="fmt-chip ${r.format}">${r.format}</span></b>
+      <span>${esc(r.team)} v ${esc(r.opposition ?? '—')}</span>
+    </span>
+    <span class="out">${bat}${bowl || (bat ? '' : '<span class="score duck">dnb</span>')}</span>
+  </button>`;
+}
+
+/* ---- player view ---- */
+function renderPlayer() {
+  const p = PLAYERS.find((x) => x.id === S.player);
+  if (!p) { S.tab = 'daily'; render(); return; }
+  const t = team1(p);
+  const all = (byPlayer.get(p.id) ?? []).filter(matchesFmt);
+  const last10 = all.slice(0, 10);
+
+  const balls = all.reduce((n, r) => n + (r.batting?.balls ?? 0), 0);
+  const runs = all.reduce((n, r) => n + (r.batting?.runs ?? 0), 0);
+  const wkts = all.reduce((n, r) => n + (r.bowling?.wickets ?? 0), 0);
+  const outs = all.filter((r) => r.batting?.out).length;
+  const sr = balls ? ((runs / balls) * 100).toFixed(1) : '—';
+  const avg = outs ? (runs / outs).toFixed(1) : runs ? '—' : '0';
+
+  // The form strip reads left-to-right as oldest-to-newest. An innings where the
+  // player only bowled is shown as a hollow tick, not a zero — not batting is not
+  // a failure, and drawing it as one misreads the player's form.
+  const maxRuns = Math.max(10, ...last10.map((r) => r.batting?.runs ?? 0));
+  const bars = last10.slice().reverse().map((r) => {
+    const batted = Boolean(r.batting?.balls);
+    const v = r.batting?.runs ?? 0;
+    const h = batted ? Math.max(3, Math.round((v / maxRuns) * 46)) : 3;
+    const cls = !batted ? 'nobat' : v === 0 ? 'duck' : v >= 50 ? 'fifty' : '';
+    const label = batted ? `${v}${r.batting.out ? '' : '*'}` : '·';
+    const tip = `${shortComp(r.competition)} · ${fmtDay(r.date)} · ` +
+      (batted ? `${v}${r.batting.out ? '' : ' not out'} off ${r.batting.balls}` : 'did not bat');
+    return `<span class="bar-wrap" title="${esc(tip)}">
+      <span class="bar ${cls}" style="height:${h}px"></span>
+      <span class="bar-val">${esc(label)}</span>
+    </span>`;
+  }).join('');
+
+  $('view').innerHTML = `
+    <div class="panel" data-team="${esc(t)}">
+      <div class="p-head">
+        <div style="flex:1;min-width:0">
+          <h2>${esc(p.name)}</h2>
+          <div class="p-meta">${esc(t || 'No franchise')}${p.registerName && p.registerName !== p.name ? ` · scorecards: ${esc(p.registerName)}` : ''}</div>
+          <div class="p-badges">
+            ${(p.formats ?? []).map((f) => `<span class="p-badge">${esc(f)}</span>`).join('')}
+            ${!p.playedIPL ? '<span class="p-badge">No IPL cap ’26</span>' : ''}
+            ${p.squadStatus === 'replaced' ? `<span class="p-badge alert">Left squad${p.squadReason === 'injury' ? ' — injury' : ''}</span>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="p-stats">
+        <div><b>${runs}</b><span>Runs</span></div>
+        <div><b>${wkts}</b><span>Wickets</span></div>
+        <div><b>${all.length}</b><span>Innings</span></div>
+        <div><b>${avg}</b><span>Average</span></div>
+        <div><b>${sr}</b><span>Strike rate</span></div>
+      </div>
+      ${last10.length ? `<div class="form-strip">
+        <div class="form-label">Last ${last10.length} innings — oldest to newest</div>
+        <div class="bars">${bars}</div>
+      </div>` : ''}
+      <div class="log">
+        ${all.length ? `<table>
+          <thead><tr><th>Date</th><th>Match</th><th style="text-align:right">Figures</th></tr></thead>
+          <tbody>${all.map(logRow).join('')}</tbody>
+        </table>` : `<div class="empty"><b>No matches yet</b>In an IPL squad, but has not appeared in a tracked competition${S.fmt ? ` in ${S.fmt}` : ''} this season.</div>`}
+      </div>
+    </div>`;
+}
+
+function logRow(r) {
+  const b = r.batting, w = r.bowling;
+  const bat = b && b.balls
+    ? `<span class="score ${b.runs >= 50 ? 'big' : b.runs === 0 ? 'duck' : ''}">${b.runs}${b.out ? '' : '*'} (${b.balls})</span>` : '';
+  const bowl = w && w.balls
+    ? `<span class="bowlfig ${w.wickets >= 3 ? 'haul' : ''}">${w.overs}–${w.runs}–${w.wickets}</span>` : '';
+  return `<tr>
+    <td class="d">${fmtDay(r.date)}</td>
+    <td class="m"><b>${esc(shortComp(r.competition))} <span class="fmt-chip ${r.format}">${r.format}</span></b>
+      <span>${esc(r.team)} v ${esc(r.opposition ?? '—')}</span></td>
+    <td class="r">${bat}${bowl || (bat ? '' : '<span class="score duck">dnb</span>')}</td>
+  </tr>`;
+}
+
+/* ---- squad grid ---- */
+function renderSquad() {
+  let list = PLAYERS;
+  if (S.team) list = list.filter((p) => team1(p) === S.team);
+  if (S.fmt) list = list.filter((p) => (p.formats ?? []).includes(S.fmt));
+  if (S.onlyOut) list = list.filter((p) => p.squadStatus === 'replaced');
+  list = list.slice().sort((a, b) => b.runs - a.runs || (b.lastPlayed ?? '').localeCompare(a.lastPlayed ?? ''));
+
+  $('view').innerHTML = `
+    <div class="sect-head">
+      <h2>${esc(S.team || 'All squads')}</h2>
+      <span class="sub">${list.length} players${S.fmt ? ` · ${S.fmt}` : ''}</span>
+      <button class="outfilter" id="outFilter" aria-pressed="${Boolean(S.onlyOut)}">
+        Left squad (${PLAYERS.filter((p) => p.squadStatus === 'replaced' && (!S.team || team1(p) === S.team)).length})
+      </button>
+    </div>
+    <div class="grid">
+      ${list.map((p) => {
+        const t = team1(p);
+        return `<button class="card" data-team="${esc(t)}" data-id="${esc(p.id ?? '')}" data-status="${esc(p.squadStatus ?? 'active')}">
+          <h3>${esc(p.name)}</h3>
+          <div class="ct">${esc(t || '—')}</div>
+          <div class="cf">
+            <div class="${p.runs ? '' : 'cz'}"><b>${p.runs}</b><span>Runs</span></div>
+            <div class="${p.wickets ? '' : 'cz'}"><b>${p.wickets}</b><span>Wkts</span></div>
+            <div class="${p.innings ? '' : 'cz'}"><b>${p.innings}</b><span>Inns</span></div>
+          </div>
+        </button>`;
+      }).join('')}
+    </div>`;
+
+  const of = $('outFilter');
+  if (of) of.onclick = () => { S.onlyOut = !S.onlyOut; render(); };
+
+  $('view').querySelectorAll('.card').forEach((c) => {
+    c.onclick = () => { S.player = c.dataset.id; S.tab = 'player'; renderSidebar(); render(); };
+  });
+}
+
+/* ---------------- events ---------------- */
+$('tabDaily').onclick = () => { S.tab = 'daily'; render(); };
+$('tabSquad').onclick = () => { S.tab = 'squad'; render(); };
+
+document.querySelectorAll('.fmt button').forEach((b) => {
+  b.onclick = () => {
+    S.fmt = b.dataset.fmt;
+    document.querySelectorAll('.fmt button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    S.dayIdx = 0;
+    render();
+  };
+});
+
+$('sideToggle').onclick = () => {
+  const s = $('side');
+  s.classList.add('open');
+  const scrim = document.createElement('div');
+  scrim.className = 'scrim';
+  scrim.onclick = () => { s.classList.remove('open'); scrim.remove(); };
+  document.body.appendChild(scrim);
+};
+
+boot();
+</script>

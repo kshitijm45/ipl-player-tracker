@@ -1,0 +1,20 @@
+{
+  "note": "Mid-season squad changes. Public squad listings show only the *current* roster, so a player ruled out through injury silently disappears from them — even though he was contracted, played part of the season, and is still someone fans follow. This file restores those players and records why they left, so the tracker keeps following them wherever they play next.",
+  "season": 2026,
+  "lastUpdated": "2026-09-20",
+  "statuses": {
+    "active": "On the roster and available.",
+    "replaced": "Was in the squad but ruled out (injury/withdrawal). Still tracked — often the player whose recovery and return fans most want to follow.",
+    "replacement": "Signed mid-season to cover a replaced player."
+  },
+  "changes": [
+    {
+      "team": "Chennai Super Kings",
+      "player": "Jamie Overton",
+      "status": "replaced",
+      "reason": "injury",
+      "lastAppearance": "2026-05-10",
+      "note": "Played 10 IPL matches for CSK before being ruled out; dropped from published squad listings thereafter."
+    }
+  ]
+}

@@ -111,6 +111,35 @@ export function resolveSquads({
 }
 
 /**
+ * Squad status for a player.
+ *
+ * Membership is not a boolean. Published squad listings show only the *current*
+ * roster, so a player ruled out through injury vanishes from them even though he was
+ * contracted, played part of the season, and is still someone fans follow — often the
+ * player they most want to follow, because they are waiting on his return.
+ *
+ * Three states, derived rather than hand-maintained wherever possible:
+ *   active      — on the current published roster
+ *   replaced    — played IPL matches for a franchise but is no longer listed by it
+ *   replacement — appeared for a franchise and is listed, but was not in the original
+ *                 squad transcription
+ *
+ * `data/squad-changes-2026.json` overrides the derivation where the reason is known
+ * (injury vs withdrawal vs trade), since that cannot be inferred from scorecards.
+ */
+export function classifySquad({ id, listedTeam, iplTeamPlayedFor, changeEntry }) {
+  if (changeEntry?.status) {
+    return { status: changeEntry.status, reason: changeEntry.reason ?? null, team: changeEntry.team ?? listedTeam ?? iplTeamPlayedFor };
+  }
+  if (listedTeam) return { status: 'active', reason: null, team: listedTeam };
+  if (iplTeamPlayedFor) {
+    // Played for a franchise but that franchise no longer lists him.
+    return { status: 'replaced', reason: 'not in current squad listing', team: iplTeamPlayedFor };
+  }
+  return { status: 'active', reason: null, team: null };
+}
+
+/**
  * The tracked player set: everyone in a listed squad, plus everyone who actually
  * turned out in an IPL match. The union matters because each source covers a gap in
  * the other — squad files miss mid-season replacements, and appearances miss the bench.
