@@ -723,6 +723,83 @@
   .dayset { margin-bottom: 34px; }
   .dayset > .eyebrow { margin-bottom: 13px; }
 
+  /* ─── form boards ─── */
+  .winpick { display: flex; gap: 3px; margin-left: auto; background: var(--sunk); padding: 4px; border-radius: 10px; }
+  .winpick button {
+    padding: 6px 12px; background: none; border: 0; border-radius: 7px;
+    font-size: 12px; color: var(--ink-3); transition: all .16s var(--e);
+  }
+  .winpick button:hover { color: var(--ink); }
+  .winpick button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--sh-1); }
+  .winpick button:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+  .boards { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .board { background: var(--surface); border: 1px solid var(--line); border-radius: var(--rad); overflow: hidden; }
+  .board-head {
+    padding: 15px 24px;
+    border-bottom: 1px solid var(--line);
+    background: var(--sunk);
+    font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3);
+  }
+  .ranks { list-style: none; margin: 0; padding: 0; }
+  .ranks li { border-bottom: 1px solid var(--line-soft); }
+  .ranks li:last-child { border-bottom: 0; }
+
+  .rank {
+    position: relative;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: center;
+    padding: 14px 24px;
+    background: none;
+    border: 0;
+    text-align: left;
+    overflow: hidden;
+  }
+  .rank:hover { background: var(--panel-2, var(--sunk)); }
+  .rank:focus-visible { outline: 2px solid var(--team); outline-offset: -2px; }
+  .rk {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px; font-weight: 500; color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .rn { min-width: 0; }
+  .rn b { display: block; font-size: 14.5px; font-weight: 600; }
+  .rn span { font-size: 12px; color: var(--ink-3); }
+  .rv {
+    font-family: "JetBrains Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 19px; font-weight: 700; letter-spacing: -.02em;
+    color: var(--team);
+  }
+  /* A hairline under each row, scaled to the leader — reads as a bar chart
+     without competing with the numbers. */
+  .rbar {
+    position: absolute; left: 0; bottom: 0; height: 2px;
+    background: var(--team); opacity: .45;
+  }
+
+  /* ─── fixtures ─── */
+  .fixtures { display: flex; flex-direction: column; gap: 22px; }
+  .fx-day > .eyebrow { margin-bottom: 10px; }
+  .fx {
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 18px;
+    align-items: baseline;
+    padding: 14px 24px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--rad-sm);
+    margin-bottom: 8px;
+  }
+  .fx-time { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+  .fx-teams { font-size: 14.5px; min-width: 0; }
+  .fx-teams b { font-weight: 600; }
+  .fx-comp { font-size: 12.5px; color: var(--ink-3); text-align: right; }
+
   .blank {
     padding: 72px 32px;
     text-align: center;
@@ -768,6 +845,11 @@
     .phero { padding: 32px 24px 28px; }
     .pstats > div { padding: 19px 22px; }
     .twin { grid-template-columns: 1fr; gap: 24px; }
+    .boards { grid-template-columns: 1fr; }
+    .fx { grid-template-columns: 70px minmax(0, 1fr); gap: 10px; padding: 12px 16px; }
+    .fx-comp { grid-column: 2; text-align: left; }
+    .winpick { margin-left: 0; width: 100%; }
+    .winpick button { flex: 1; }
     .ledger td, .ledger thead th { padding-inline: 20px; }
     .gap { height: 52px; }
   }
@@ -801,6 +883,7 @@
       </button>
       <div class="nav" role="tablist">
         <button id="navToday" role="tab" aria-selected="true">Today</button>
+        <button id="navForm" role="tab" aria-selected="false">Form</button>
         <button id="navAll" role="tab" aria-selected="false">All players</button>
       </div>
       <div class="segs" role="group" aria-label="Format">
@@ -817,7 +900,7 @@
 <script>
 const IPL = 'Indian Premier League';
 const S = { view: 'today', club: '', player: null, fmt: '', q: '', day: null };
-let P = [], F = [], D = [], M = {}, byP = new Map(), byD = new Map();
+let P = [], F = [], D = [], M = {}, FX = [], byP = new Map(), byD = new Map();
 
 const $ = (i) => document.getElementById(i);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -869,9 +952,64 @@ function refreshScope() {
   scopeIds = scoped ? new Set(squadInScope().map((p) => p.id)) : null;
 }
 
+/* ── deep links ──
+   Every view is addressable, so a player page can be sent to someone. The hash
+   is written on each render and read on load and on back/forward. */
+function slugify(s) {
+  return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+let suppressHash = false;
+
+function writeHash() {
+  if (suppressHash) return;
+  const parts = [];
+  if (S.view === 'player' && S.player) {
+    const p = P.find((x) => x.id === S.player);
+    parts.push('player', p ? `${slugify(p.name)}-${p.id.slice(0, 6)}` : S.player);
+  } else {
+    if (S.club) parts.push('club', slugify(S.club));
+    parts.push(S.view);
+  }
+  if (S.fmt) parts.push(`fmt=${S.fmt}`);
+  const next = '#/' + parts.join('/');
+  if (location.hash !== next) history.replaceState(null, '', next);
+}
+
+function readHash() {
+  const raw = decodeURIComponent(location.hash.replace(/^#\/?/, ''));
+  if (!raw) return false;
+  const parts = raw.split('/').filter(Boolean);
+
+  const fmtPart = parts.find((x) => x.startsWith('fmt='));
+  if (fmtPart) {
+    const f = fmtPart.slice(4);
+    if (['T20', 'ODI', 'Test'].includes(f)) S.fmt = f;
+  }
+
+  const i = parts.indexOf('player');
+  if (i !== -1 && parts[i + 1]) {
+    const tail = parts[i + 1];
+    const short = tail.slice(-6);
+    const hit = P.find((x) => x.id?.startsWith(short)) ??
+                P.find((x) => slugify(x.name) === tail.replace(/-[0-9a-f]{6}$/, ''));
+    if (hit) { S.player = hit.id; S.view = 'player'; S.club = club1(hit) || ''; return true; }
+  }
+
+  const c = parts.indexOf('club');
+  if (c !== -1 && parts[c + 1]) {
+    const hit = [...new Set(P.map(club1).filter(Boolean))].find((x) => slugify(x) === parts[c + 1]);
+    if (hit) S.club = hit;
+  }
+  const view = parts.find((x) => ['today', 'form', 'all'].includes(x));
+  if (view) S.view = view;
+  return true;
+}
+
 function boot() {
   const d = window.__DATA__;
-  P = d.players; F = d.perfs; D = d.days; M = d.meta;
+  P = d.players; F = d.perfs; D = d.days; M = d.meta; FX = d.fixtures ?? [];
   for (const r of F) {
     if (!byP.has(r.playerId)) byP.set(r.playerId, []);
     byP.get(r.playerId).push(r);
@@ -879,8 +1017,26 @@ function boot() {
     byD.get(r.date).push(r);
   }
   for (const l of byP.values()) l.sort((a, b) => b.date.localeCompare(a.date));
+
+  readHash();
+  syncControls();
   drawRail();
   draw();
+
+  window.addEventListener('hashchange', () => {
+    suppressHash = true;
+    readHash();
+    syncControls();
+    drawRail();
+    draw();
+    suppressHash = false;
+  });
+}
+
+/** Reflect state that lives in the hash back onto the controls. */
+function syncControls() {
+  document.querySelectorAll('.segs button').forEach((b) =>
+    b.setAttribute('aria-pressed', String((b.dataset.f ?? '') === S.fmt)));
 }
 
 /* ── rail ──
@@ -935,11 +1091,14 @@ function draw() {
   refreshScope();
   $('navToday').setAttribute('aria-selected', String(S.view === 'today'));
   $('navAll').setAttribute('aria-selected', String(S.view === 'all'));
+  $('navForm').setAttribute('aria-selected', String(S.view === 'form'));
   $('navAll').textContent = S.club ? 'Squad' : 'All players';
 
   if (S.view === 'today') drawToday();
   else if (S.view === 'player') drawPlayer();
+  else if (S.view === 'form') drawForm();
   else drawAll();
+  writeHash();
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
@@ -987,6 +1146,7 @@ function drawToday() {
     </div>
     ${top ? bigRow(top, tp) : ''}
     <div class="rows stagger">${rest.map(smallRow).join('')}</div>
+    ${comingUp()}
     ${trail(days, i)}`;
 
   $('dPrev').onclick = () => { S.day = Math.max(0, i - 1); draw(); };
@@ -1013,6 +1173,40 @@ function trail(days, from) {
         <div class="eyebrow">${dLong(d.date)}</div>
         <div class="rows">${pickDay(d).sort((a, b) => impact(b) - impact(a)).map(smallRow).join('')}</div>
       </div>`).join('')}`;
+}
+
+/**
+ * What is on next.
+ *
+ * The schedule lists all of world cricket, so only fixtures in competitions where
+ * tracked players have been turning out are shown — otherwise this is a wall of
+ * matches nobody here cares about.
+ */
+function comingUp() {
+  const today = new Date().toISOString().slice(0, 10);
+  const next = FX.filter((f) => f.watch && f.date >= today).slice(0, 6);
+  if (!next.length) return '';
+
+  const byDay = new Map();
+  for (const f of next) {
+    if (!byDay.has(f.date)) byDay.set(f.date, []);
+    byDay.get(f.date).push(f);
+  }
+
+  return `<div class="gap"></div>
+    <div class="sect"><h2>Coming up</h2><p>Fixtures in competitions your players are in</p></div>
+    <div class="fixtures">
+      ${[...byDay.entries()].map(([d, list]) => `
+        <div class="fx-day">
+          <div class="eyebrow">${dLong(d)}</div>
+          ${list.map((f) => `
+            <div class="fx">
+              <span class="fx-time mono">${esc(f.time)}</span>
+              <span class="fx-teams"><b>${esc(f.teamA)}</b> v <b>${esc(f.teamB)}</b></span>
+              <span class="fx-comp">${esc(f.competition)}${f.stage ? ` · ${esc(f.stage)}` : ''}</span>
+            </div>`).join('')}
+        </div>`).join('')}
+    </div>`;
 }
 
 /** Innings on a day, filtered to the current club and format. */
@@ -1246,6 +1440,97 @@ function card(p) {
   </button>`;
 }
 
+/* ── form: who is actually scoring right now ──
+   A season table flattens a player who made 400 runs in April and none since
+   against one who is scoring this week. This window answers the question a fan
+   actually asks — who is in form — so it is dated, not cumulative. */
+const WINDOWS = [
+  { days: 14, label: 'Last 14 days' },
+  { days: 30, label: 'Last 30 days' },
+  { days: 90, label: 'Last 3 months' },
+];
+
+function drawForm() {
+  const win = WINDOWS.find((w) => w.days === S.win) ?? WINDOWS[1];
+  const latest = D[0]?.date ?? new Date().toISOString().slice(0, 10);
+  const cut = new Date(new Date(latest + 'T00:00:00').getTime() - win.days * 864e5)
+    .toISOString().slice(0, 10);
+
+  const rows = F.filter((r) => r.date >= cut && okFmt(r) && inScope(r));
+  const agg = new Map();
+  for (const r of rows) {
+    if (!agg.has(r.playerId)) {
+      agg.set(r.playerId, { runs: 0, wkts: 0, inns: 0, balls: 0, outs: 0, best: 0, bestBowl: 0 });
+    }
+    const a = agg.get(r.playerId);
+    a.runs += r.batting?.runs ?? 0;
+    a.balls += r.batting?.balls ?? 0;
+    a.wkts += r.bowling?.wickets ?? 0;
+    a.inns += 1;
+    if (r.batting?.out) a.outs += 1;
+    a.best = Math.max(a.best, r.batting?.runs ?? 0);
+    a.bestBowl = Math.max(a.bestBowl, r.bowling?.wickets ?? 0);
+  }
+
+  const list = [...agg.entries()]
+    .map(([id, a]) => ({ p: P.find((x) => x.id === id), ...a }))
+    .filter((x) => x.p);
+
+  const bat = list.filter((x) => x.runs > 0).sort((a, b) => b.runs - a.runs).slice(0, 10);
+  const bowl = list.filter((x) => x.wkts > 0).sort((a, b) => b.wkts - a.wkts).slice(0, 10);
+
+  $('stage').innerHTML = `
+    <div class="sect">
+      <h2>In form</h2>
+      <p>${rows.length} innings${S.club ? ` by ${esc(S.club)} players` : ''} · ${win.label.toLowerCase()}</p>
+      <div class="winpick" role="group" aria-label="Time window">
+        ${WINDOWS.map((w) => `<button data-w="${w.days}" aria-pressed="${w.days === win.days}">${w.label}</button>`).join('')}
+      </div>
+    </div>
+
+    ${!list.length ? `<div class="blank"><b>No play in this window</b><span>Try a longer window or another format.</span></div>` : `
+    <div class="boards">
+      ${board('Runs', bat, (x) => x.runs, (x) =>
+        `${x.inns} ${x.inns === 1 ? 'match' : 'matches'} · best ${x.best}${
+          x.balls ? ` · SR ${((x.runs / x.balls) * 100).toFixed(0)}` : ''}`)}
+      ${board('Wickets', bowl, (x) => x.wkts, (x) =>
+        `${x.inns} ${x.inns === 1 ? 'match' : 'matches'} · best ${x.bestBowl} in a match`)}
+    </div>`}`;
+
+  $('stage').querySelectorAll('.winpick button').forEach((b) => {
+    b.onclick = () => { S.win = +b.dataset.w; draw(); };
+  });
+  wire();
+}
+
+function board(title, rows, value, sub) {
+  if (!rows.length) {
+    return `<div class="board"><div class="board-head">${title}</div>
+      <div class="blank" style="padding:40px 20px"><span>Nobody yet in this window.</span></div></div>`;
+  }
+  const top = value(rows[0]) || 1;
+  return `<div class="board">
+    <div class="board-head">${title}</div>
+    <ol class="ranks stagger">
+      ${rows.map((x, i) => {
+        const c = club1(x.p);
+        const v = value(x);
+        return `<li>
+          <button class="rank" data-team="${esc(c)}" data-id="${esc(x.p.id ?? '')}">
+            <span class="rk">${i + 1}</span>
+            <span class="rn">
+              <b>${esc(x.p.name)}</b>
+              <span>${esc(c || '—')} · ${sub(x)}</span>
+            </span>
+            <span class="rv">${v}</span>
+            <span class="rbar" style="width:${Math.round((v / top) * 100)}%"></span>
+          </button>
+        </li>`;
+      }).join('')}
+    </ol>
+  </div>`;
+}
+
 /* ── all players ── */
 function drawAll() {
   let list = squadInScope().slice();
@@ -1277,6 +1562,7 @@ function shut() {
 
 $('navToday').onclick = () => { S.view = 'today'; draw(); };
 $('navAll').onclick = () => { S.view = 'all'; draw(); };
+$('navForm').onclick = () => { S.view = 'form'; draw(); };
 
 document.querySelectorAll('.segs button').forEach((b) => {
   b.onclick = () => {
