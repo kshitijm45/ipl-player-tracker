@@ -180,6 +180,12 @@
 
   .rail-scroll { flex: 1; overflow-y: auto; padding: 0 12px 28px; scrollbar-width: thin; }
 
+  .seek-note {
+    padding: 8px 14px 14px;
+    font-size: 12.5px;
+    color: var(--ink-3);
+  }
+
   .club { margin-bottom: 4px; }
 
   .club-btn {
@@ -588,6 +594,16 @@
     margin-bottom: 4px;
   }
   .spark { display: flex; align-items: flex-end; gap: 7px; height: 92px; margin-top: 10px; }
+  .spark-none {
+    height: 92px;
+    margin-top: 10px;
+    display: grid;
+    place-items: center;
+    border: 1px dashed var(--line);
+    border-radius: var(--rad-sm);
+    color: var(--ink-3);
+    font-size: 12.5px;
+  }
   .sp { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 7px; }
   .sp i {
     display: block;
@@ -678,6 +694,8 @@
   }
   .card:hover { transform: translateY(-3px); box-shadow: var(--sh-2); border-color: rgba(var(--team-wash), .45); }
   .card:focus-visible { outline: 2px solid var(--team); outline-offset: 2px; }
+  .card.inert { cursor: default; opacity: .62; }
+  .card.inert:hover { transform: none; box-shadow: var(--sh-1); border-color: var(--line); }
   .card h3 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
   .card .cm {
     margin-top: 5px;
@@ -759,7 +777,7 @@
   }
 </style>
 
-<div class="app">
+<div class="app" lang="en">
   <aside class="rail" id="rail">
     <div class="brand">
       <h1>OFF<i>SEASON</i></h1>
@@ -779,7 +797,7 @@
   <div class="main">
     <header class="bar">
       <button class="burger" id="burger" aria-label="Open squads">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
       <div class="nav" role="tablist">
         <button id="navToday" role="tab" aria-selected="true">Today</button>
@@ -871,8 +889,13 @@ function boot() {
    so the rail stays a short, scannable list of ten rather than 260 names. */
 function drawRail() {
   const clubs = [...new Set(P.map(club1).filter(Boolean))].sort();
+  const q = S.q.trim();
+  const hits = q ? squadInScope().length : null;
 
   $('clubs').innerHTML = `
+    ${q ? `<div class="seek-note">${hits
+      ? `${hits} player${hits === 1 ? ' matches' : 's match'} “${esc(q)}”`
+      : `No player matches “${esc(q)}”`}</div>` : ''}
     ${clubs.map((c) => {
       const squad = P.filter((p) => club1(p) === c);
       const on = S.club === c;
@@ -899,7 +922,13 @@ $('clubs').addEventListener('click', (e) => {
   drawRail(); draw(); shut();
 });
 
-$('seek').addEventListener('input', (e) => { S.q = e.target.value; S.day = null; draw(); });
+$('seek').addEventListener('input', (e) => {
+  S.q = e.target.value;
+  S.day = null;
+  refreshScope();
+  drawRail(); // the rail carries the match count, so it has to redraw too
+  draw();
+});
 
 /* ── router ── */
 function draw() {
@@ -942,7 +971,7 @@ function drawToday() {
   $('stage').innerHTML = `
     <div class="datebar">
       <button class="nav-btn" id="dPrev" ${i === 0 ? 'disabled' : ''} aria-label="Later day">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m15 5-7 7 7 7"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>
       </button>
       <div class="datehead">
         <b>${dLong(day.date)}</b>
@@ -950,7 +979,7 @@ function drawToday() {
           new Set(rows.map((r) => r.playerId)).size === 1 ? '' : 's'}${S.club ? ` · ${esc(S.club)}` : ''}</span>
       </div>
       <button class="nav-btn" id="dNext" ${i >= days.length - 1 ? 'disabled' : ''} aria-label="Earlier day">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 5 7 7-7 7"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
       </button>
       <select id="dPick" aria-label="Jump to a date">
         ${days.map((d, n) => { const k = pick(d).length; return `<option value="${n}" ${n === i ? 'selected' : ''}>${dLong(d.date)} — ${k} innings</option>`; }).join('')}
@@ -989,6 +1018,11 @@ function trail(days, from) {
 /** Innings on a day, filtered to the current club and format. */
 function pickDay(d) {
   return (byD.get(d.date) ?? []).filter((r) => okFmt(r) && inScope(r));
+}
+
+/** A chart with nothing in it reads as broken; say so instead of drawing air. */
+function emptyChart(msg) {
+  return `<div class="spark-none">${esc(msg)}</div>`;
 }
 
 function figure(r) {
@@ -1053,6 +1087,9 @@ function drawPlayer() {
   const batPeak = Math.max(10, ...last.map((r) => r.batting?.runs ?? 0));
   const bowlPeak = Math.max(2, ...last.map((r) => r.bowling?.wickets ?? 0));
 
+  const anyBat = last.some((r) => r.batting?.balls);
+  const anyBowl = last.some((r) => r.bowling?.balls || r.bowling?.wickets);
+
   const spark = last.slice().reverse().map((r) => {
     const batted = Boolean(r.batting?.balls);
     const v = r.batting?.runs ?? 0;
@@ -1080,7 +1117,6 @@ function drawPlayer() {
         <div class="pmeta">
           ${(p.formats ?? []).map((f) => `<span class="pill">${esc(f)}</span>`).join('')}
           <span class="pill ghost">${(p.competitions ?? []).length} competitions</span>
-          ${p.registerName && p.registerName !== p.name ? `<span class="pill ghost">scorecards: ${esc(p.registerName)}</span>` : ''}
         </div>
       </div>
       <div class="pstats">
@@ -1096,11 +1132,11 @@ function drawPlayer() {
         <div class="twin">
           <div>
             <div class="mini">Runs scored</div>
-            <div class="spark">${spark}</div>
+            ${anyBat ? `<div class="spark">${spark}</div>` : emptyChart('Has not batted in this run')}
           </div>
           <div>
             <div class="mini">Wickets taken</div>
-            <div class="spark">${bowlSpark}</div>
+            ${anyBowl ? `<div class="spark">${bowlSpark}</div>` : emptyChart('Has not bowled in this run')}
           </div>
         </div>
       </div>` : ''}
@@ -1187,8 +1223,12 @@ function lastSeries(p) {
 function card(p) {
   const c = club1(p);
   const s = lastSeries(p);
+  // A player with no canonical id has no match history to open, so the card is
+  // inert rather than a button that looks clickable and does nothing.
+  const dead = !p.id;
 
-  return `<button class="card" data-team="${esc(c)}" data-id="${esc(p.id ?? '')}">
+  return `<button class="card${dead ? ' inert' : ''}" data-team="${esc(c)}"${
+    dead ? ' disabled aria-disabled="true"' : ` data-id="${esc(p.id)}"`}>
     <h3>${esc(p.name)}</h3>
     ${s
       ? `<div class="cm"><b>${esc(comp(s.name))}</b> · ${dShort(s.when)}</div>

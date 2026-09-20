@@ -64,7 +64,7 @@ export function expandTeam(code) {
   return CODE_TO_TEAM[code] ?? NATION[code] ?? code;
 }
 
-export function mergePerformances({ crexRows = [], cricsheetRows = [], today } = {}) {
+export function mergePerformances({ crexRows = [], cricsheetRows = [], today, from } = {}) {
   const merged = new Map();
   const cutoff = today ?? new Date().toISOString().slice(0, 10);
 
@@ -114,7 +114,14 @@ export function mergePerformances({ crexRows = [], cricsheetRows = [], today } =
     });
   }
 
-  return [...merged.values()].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+  // CREX player pages reach back over past seasons. This is a current-season
+  // tracker, so anything before the season start is dropped rather than shown
+  // alongside this year's form.
+  const rows = from
+    ? [...merged.values()].filter((r) => !r.date || r.date >= from)
+    : [...merged.values()];
+
+  return rows.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
 }
 
 /** Summary for the build log and the site footer. */

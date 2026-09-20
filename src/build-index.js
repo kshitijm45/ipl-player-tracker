@@ -115,6 +115,24 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
     if (change?.lastAppearance) t.lastIplAppearance = change.lastAppearance;
   }
 
+  // A name carried as "unmapped" may already be present as a resolved player: he
+  // reached the tracked set through his IPL appearances while the squad listing
+  // failed to resolve. Same name, same franchise means the same person, so drop the
+  // empty copy rather than showing him twice with 0 innings.
+  const resolvedByName = new Map();
+  for (const t of tracked.values()) {
+    if (!t.id) continue;
+    const reg = registry.get(t.id);
+    for (const n of [reg?.unique_name, t.listedAs].filter(Boolean)) {
+      resolvedByName.set(`${String(n).toLowerCase()}|${t.teams?.[0] ?? ''}`, t);
+    }
+  }
+  for (const [key, t] of [...tracked]) {
+    if (t.id || !t.unmapped) continue;
+    const match = resolvedByName.get(`${String(t.name).toLowerCase()}|${t.teams?.[0] ?? ''}`);
+    if (match) tracked.delete(key);
+  }
+
   const trackedIds = new Set([...tracked.values()].map((t) => t.id).filter(Boolean));
 
   // Now pull everything those players did anywhere else this year.
@@ -140,7 +158,7 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
     }
   }
 
-  const performances = mergePerformances({ crexRows, cricsheetRows });
+  const performances = mergePerformances({ crexRows, cricsheetRows, from });
   const merge = mergeStats(performances);
 
   /** @type {Map<string, any>} */
