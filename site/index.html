@@ -1,0 +1,890 @@
+<meta charset="utf-8">
+<title>Beyond the IPL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  /* ---------------------------------------------------------------
+     Palette: IPL identity for shared chrome, franchise identity for
+     anything scoped to a team. Franchise tokens are set per element
+     via [data-team], so a player row or panel recolours wholesale.
+     --------------------------------------------------------------- */
+  :root {
+    --ipl-navy: #0C2340;
+    --ipl-gold: #D1AB3E;
+
+    --bg: #F5F3EF;
+    --surface: #FFFFFF;
+    --surface-2: #EFECE5;
+    --ink: #121A26;
+    --ink-2: #47526A;
+    --ink-3: #7C879B;
+    --rule: #DDD8CE;
+    --rule-2: #C9C3B6;
+
+    --accent: var(--ipl-navy);
+    --accent-ink: #FFFFFF;
+    --gold: #A8821F;
+
+    --good: #1C7A4A;
+    --warn: #B4690E;
+    --dim: #8A93A5;
+
+    --shadow: 0 1px 2px rgba(12, 35, 64, .07), 0 8px 24px -12px rgba(12, 35, 64, .18);
+
+    --team: var(--ipl-navy);
+    --team-2: var(--ipl-gold);
+    --team-ink: #FFFFFF;
+
+    --step--1: clamp(.72rem, .70rem + .1vw, .78rem);
+    --step-0: clamp(.9rem, .87rem + .15vw, .96rem);
+    --step-1: clamp(1.08rem, 1.0rem + .35vw, 1.28rem);
+    --step-2: clamp(1.45rem, 1.25rem + .9vw, 2.1rem);
+    --step-3: clamp(2rem, 1.5rem + 2.2vw, 3.4rem);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0B1119;
+      --surface: #131C28;
+      --surface-2: #1B2634;
+      --ink: #EDF0F5;
+      --ink-2: #A6B2C4;
+      --ink-3: #74829A;
+      --rule: #263243;
+      --rule-2: #35455B;
+      --accent: #EAF0FA;
+      --accent-ink: #0C2340;
+      --gold: #E3BE5A;
+      --good: #4FBF85;
+      --warn: #E0A64A;
+      --dim: #6C7B92;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 10px 30px -14px rgba(0, 0, 0, .8);
+      --team-ink: #FFFFFF;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0B1119;
+    --surface: #131C28;
+    --surface-2: #1B2634;
+    --ink: #EDF0F5;
+    --ink-2: #A6B2C4;
+    --ink-3: #74829A;
+    --rule: #263243;
+    --rule-2: #35455B;
+    --accent: #EAF0FA;
+    --accent-ink: #0C2340;
+    --gold: #E3BE5A;
+    --good: #4FBF85;
+    --warn: #E0A64A;
+    --dim: #6C7B92;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 10px 30px -14px rgba(0, 0, 0, .8);
+    --team-ink: #FFFFFF;
+  }
+
+  /* Franchise palettes. Primary carries the team, secondary is its
+     traditional trim (KKR gold, LSG orange, RCB black, GT gold). */
+  [data-team="Chennai Super Kings"]        { --team: #E3A700; --team-2: #1A4FA0; --team-ink: #1A1400; }
+  [data-team="Delhi Capitals"]             { --team: #17449B; --team-2: #C8102E; --team-ink: #FFF; }
+  [data-team="Gujarat Titans"]             { --team: #1B2A4A; --team-2: #C6A04A; --team-ink: #FFF; }
+  [data-team="Kolkata Knight Riders"]      { --team: #4B2A7B; --team-2: #C6A04A; --team-ink: #FFF; }
+  [data-team="Lucknow Super Giants"]       { --team: #0C63B8; --team-2: #E8842B; --team-ink: #FFF; }
+  [data-team="Mumbai Indians"]             { --team: #0A50A1; --team-2: #C6A04A; --team-ink: #FFF; }
+  [data-team="Punjab Kings"]               { --team: #C8161E; --team-2: #C0C4C8; --team-ink: #FFF; }
+  [data-team="Rajasthan Royals"]           { --team: #D31A70; --team-2: #1B2A4A; --team-ink: #FFF; }
+  [data-team="Royal Challengers Bengaluru"]{ --team: #C4162A; --team-2: #1A1A1A; --team-ink: #FFF; }
+  [data-team="Sunrisers Hyderabad"]        { --team: #E05A16; --team-2: #1B2A4A; --team-ink: #FFF; }
+
+  :root[data-theme="dark"] [data-team="Chennai Super Kings"],
+  :root:not([data-theme="light"]) [data-team="Chennai Super Kings"] { --team: #F2BA1C; }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: var(--step-0);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, .ui {
+    font-family: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+    font-weight: 600;
+  }
+
+  .num {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .wrap {
+    width: min(1160px, 100%);
+    margin-inline: auto;
+    padding-inline: 20px;
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead {
+    background: var(--ipl-navy);
+    color: #fff;
+    padding-block: 28px 0;
+    border-bottom: 3px solid var(--ipl-gold);
+  }
+  :root[data-theme="dark"] .masthead,
+  :root:not([data-theme="light"]) .masthead { background: #081A31; }
+
+  .brandrow {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-weight: 800;
+    font-size: var(--step-3);
+    line-height: .95;
+    letter-spacing: -.025em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .brand em {
+    font-style: normal;
+    color: var(--ipl-gold);
+  }
+
+  .standfirst {
+    font-size: var(--step-0);
+    color: #C3D0E4;
+    max-width: 62ch;
+    margin: 10px 0 0;
+  }
+
+  .meta-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 26px;
+    margin: 22px 0 0;
+    padding: 0 0 18px;
+    list-style: none;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--step--1);
+    color: #9FB2CC;
+  }
+  .meta-strip b {
+    color: #fff;
+    font-weight: 500;
+  }
+
+  /* ---------- controls ---------- */
+  .controls {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 20;
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .controls-inner {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding-block: 12px;
+  }
+
+  .search {
+    flex: 1 1 210px;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--rule-2);
+    border-radius: 3px;
+    padding: 7px 11px;
+  }
+  .search:focus-within {
+    border-color: var(--team, var(--accent));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ipl-navy) 14%, transparent);
+  }
+  .search input {
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    width: 100%;
+    outline: none;
+  }
+  .search svg { flex: none; color: var(--ink-3); }
+
+  select.filter {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: var(--step--1);
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--rule-2);
+    border-radius: 3px;
+    padding: 8px 10px;
+    max-width: 100%;
+  }
+  select.filter:focus-visible {
+    outline: 2px solid var(--ipl-navy);
+    outline-offset: 1px;
+  }
+
+  .segmented {
+    display: flex;
+    border: 1px solid var(--rule-2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .segmented button {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: var(--step--1);
+    padding: 8px 12px;
+    background: var(--surface);
+    color: var(--ink-2);
+    border: 0;
+    border-right: 1px solid var(--rule);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .segmented button:last-child { border-right: 0; }
+  .segmented button[aria-pressed="true"] {
+    background: var(--ipl-navy);
+    color: #fff;
+  }
+  .segmented button:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+
+  .count {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--step--1);
+    color: var(--ink-3);
+    margin-left: auto;
+  }
+
+  /* ---------- team rail ---------- */
+  .teams {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 10px 0 14px;
+    scrollbar-width: thin;
+    /* Fade the right edge so it reads as scrollable rather than cut off. */
+    mask-image: linear-gradient(90deg, #000 95%, transparent);
+  }
+  .teamchip {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px 6px 8px;
+    border: 1px solid var(--rule-2);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink-2);
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: var(--step--1);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .teamchip .dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--team);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--team-2) 70%, transparent);
+  }
+  .teamchip[aria-pressed="true"] {
+    background: var(--team);
+    color: var(--team-ink);
+    border-color: var(--team);
+  }
+  .teamchip[aria-pressed="true"] .dot {
+    background: var(--team-ink);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--team-2) 80%, transparent);
+  }
+  .teamchip:focus-visible { outline: 2px solid var(--ipl-navy); outline-offset: 2px; }
+
+  /* ---------- roster ---------- */
+  main { padding-block: 4px 64px; }
+
+  .roster {
+    display: grid;
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .player {
+    background: var(--surface);
+    border-left: 4px solid var(--team);
+    display: grid;
+    grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr) minmax(0, 2.4fr) auto;
+    gap: 16px;
+    align-items: center;
+    padding: 13px 16px;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    font: inherit;
+    color: inherit;
+    border-top: 0; border-right: 0; border-bottom: 0;
+  }
+  .player:hover { background: var(--surface-2); }
+  .player:focus-visible { outline: 2px solid var(--team); outline-offset: -3px; }
+  .player[data-benched="true"] { background: repeating-linear-gradient(135deg, var(--surface), var(--surface) 9px, var(--surface-2) 9px, var(--surface-2) 18px); }
+
+  .pname {
+    font-family: "Source Serif 4", serif;
+    font-weight: 600;
+    font-size: var(--step-1);
+    line-height: 1.2;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  .palias {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: var(--step--1);
+    color: var(--ink-3);
+    display: block;
+    margin-top: 1px;
+  }
+
+  .pteam {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: var(--step--1);
+    color: var(--team);
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  :root[data-theme="dark"] .pteam,
+  :root:not([data-theme="light"]) .pteam { color: color-mix(in srgb, var(--team) 72%, #fff); }
+
+  .pstatus {
+    display: inline-block;
+    margin-top: 3px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--warn);
+  }
+
+  /* One row of chips, clipped rather than wrapped, so every roster row keeps the
+     same height and the columns stay scannable down the page. */
+  .spread {
+    display: flex;
+    gap: 5px;
+    overflow: hidden;
+    flex-wrap: nowrap;
+    mask-image: linear-gradient(90deg, #000 88%, transparent);
+  }
+  .comp {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: 11.5px;
+    line-height: 1;
+    padding: 4px 7px;
+    border-radius: 2px;
+    background: var(--surface-2);
+    color: var(--ink-2);
+    border: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  .comp.ipl {
+    background: color-mix(in srgb, var(--team) 14%, transparent);
+    border-color: color-mix(in srgb, var(--team) 40%, transparent);
+    color: var(--team);
+  }
+  :root[data-theme="dark"] .comp.ipl,
+  :root:not([data-theme="light"]) .comp.ipl { color: color-mix(in srgb, var(--team) 70%, #fff); }
+  .comp.more { background: none; border-style: dashed; color: var(--ink-3); }
+
+  .figs {
+    display: flex;
+    gap: 18px;
+    align-items: baseline;
+    justify-content: flex-end;
+  }
+  .fig { text-align: right; }
+  .fig b {
+    display: block;
+    font-family: "IBM Plex Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: var(--step-1);
+    font-weight: 600;
+    line-height: 1.05;
+  }
+  .fig span {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: 10.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .fig.zero b { color: var(--dim); font-weight: 400; }
+
+  /* ---------- detail ---------- */
+  dialog.sheet {
+    border: 0;
+    padding: 0;
+    width: min(760px, calc(100% - 28px));
+    background: var(--surface);
+    color: var(--ink);
+    border-radius: 5px;
+    box-shadow: var(--shadow);
+  }
+  dialog.sheet::backdrop { background: rgba(8, 16, 28, .55); backdrop-filter: blur(2px); }
+
+  .sheet-head {
+    background: var(--team);
+    color: var(--team-ink);
+    padding: 20px 22px 18px;
+    border-bottom: 3px solid var(--team-2);
+  }
+  .sheet-head h2 {
+    margin: 0;
+    font-size: var(--step-2);
+    line-height: 1.05;
+    letter-spacing: -.02em;
+    font-weight: 800;
+    text-wrap: balance;
+  }
+  .sheet-sub {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--step--1);
+    opacity: .85;
+    margin-top: 6px;
+  }
+
+  .sheet-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+  .sheet-stats div { background: var(--surface); padding: 12px 14px; }
+  .sheet-stats b {
+    display: block;
+    font-family: "IBM Plex Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: var(--step-1);
+    font-weight: 600;
+  }
+  .sheet-stats span {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: 10.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  .log { max-height: min(52vh, 460px); overflow-y: auto; }
+  .log table { width: 100%; border-collapse: collapse; font-size: var(--step--1); }
+  .log th {
+    position: sticky; top: 0;
+    background: var(--surface-2);
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: 10.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    text-align: left;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  .log td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  .log tr:last-child td { border-bottom: 0; }
+  .log .date { font-family: "IBM Plex Mono", monospace; color: var(--ink-3); white-space: nowrap; }
+  .log .fixture { color: var(--ink-2); }
+  .log .fixture b { color: var(--ink); font-weight: 600; display: block; font-family: "Bricolage Grotesque", sans-serif; font-size: var(--step--1); }
+  .log .perf { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+  .log .perf .bat { font-weight: 600; }
+  .log .perf .bowl { color: var(--ink-2); display: block; }
+  .log .fifty { color: var(--good); font-weight: 600; }
+  .log .duck { color: var(--dim); }
+
+  .sheet-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    border-top: 1px solid var(--rule);
+    background: var(--surface-2);
+    flex-wrap: wrap;
+  }
+  .sheet-foot p {
+    margin: 0;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--step--1);
+    color: var(--ink-3);
+  }
+  .sheet-foot button {
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: var(--step--1);
+    padding: 8px 16px;
+    border: 1px solid var(--rule-2);
+    background: var(--surface);
+    color: var(--ink);
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .sheet-foot button:hover { background: var(--bg); }
+
+  .empty {
+    padding: 48px 20px;
+    text-align: center;
+    color: var(--ink-3);
+    background: var(--surface);
+  }
+  .empty b { display: block; font-family: "Bricolage Grotesque", sans-serif; color: var(--ink); margin-bottom: 4px; }
+
+  footer.page {
+    border-top: 1px solid var(--rule);
+    padding-block: 22px 40px;
+    color: var(--ink-3);
+    font-size: var(--step--1);
+  }
+  footer.page p { margin: 0 0 6px; max-width: 70ch; }
+  footer.page a { color: inherit; }
+
+  @media (max-width: 760px) {
+    .player {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: "name figs" "team figs" "spread spread";
+      gap: 6px 14px;
+    }
+    .player > .pname-cell { grid-area: name; }
+    .player > .pteam-cell { grid-area: team; }
+    .player > .spread { grid-area: spread; margin-top: 4px; }
+    .player > .figs { grid-area: figs; align-self: center; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="brandrow">
+      <h1 class="brand">Beyond the <em>IPL</em></h1>
+    </div>
+    <p class="standfirst">
+      IPL squad players scatter across the world between seasons — internationals, the Big Bash,
+      county cricket, tri-series nobody televises. This follows every player on an IPL 2026 roster,
+      everywhere else they turn out.
+    </p>
+    <ul class="meta-strip ui" id="metaStrip"></ul>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="wrap">
+    <div class="controls-inner">
+      <label class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path>
+        </svg>
+        <input id="q" type="search" placeholder="Search a player" autocomplete="off" aria-label="Search players">
+      </label>
+
+      <select class="filter" id="compFilter" aria-label="Filter by competition">
+        <option value="">All competitions</option>
+      </select>
+
+      <div class="segmented" role="group" aria-label="Sort order">
+        <button id="sortRecent" aria-pressed="true">Recent</button>
+        <button id="sortRuns" aria-pressed="false">Runs</button>
+        <button id="sortWkts" aria-pressed="false">Wickets</button>
+      </div>
+
+      <div class="segmented" role="group" aria-label="Filter by activity">
+        <button id="viewAll" aria-pressed="true">All</button>
+        <button id="viewOutside" aria-pressed="false">Played elsewhere</button>
+        <button id="viewIdle" aria-pressed="false">No matches</button>
+      </div>
+
+      <span class="count num" id="count"></span>
+    </div>
+    <div class="teams" id="teams" role="group" aria-label="Filter by franchise"></div>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="roster" id="roster"></div>
+</main>
+
+<footer class="page wrap">
+  <p id="footNote"></p>
+  <p>
+    Ball-by-ball data from <a href="https://cricsheet.org">Cricsheet</a> (CC BY 4.0), aggregated into
+    per-innings figures. Squads are transcribed from public listings and pinned to Cricsheet player
+    identifiers by hand, so a player is followed across competitions by identity rather than by name.
+  </p>
+</footer>
+
+<dialog class="sheet" id="sheet" aria-labelledby="sheetName">
+  <div class="sheet-head" id="sheetHead">
+    <h2 id="sheetName"></h2>
+    <div class="sheet-sub num" id="sheetSub"></div>
+  </div>
+  <div class="sheet-stats" id="sheetStats"></div>
+  <div class="log" id="sheetLog"></div>
+  <div class="sheet-foot">
+    <p id="sheetFoot"></p>
+    <button id="closeSheet" autofocus>Close</button>
+  </div>
+</dialog>
+
+<script>
+  const IPL = 'Indian Premier League';
+  const state = { q: '', team: '', comp: '', sort: 'recent', view: 'all' };
+  let players = [], perfs = [], byPlayer = new Map(), meta = {};
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  /** Short competition label — full tour names are far too long for a chip. */
+  function shortComp(c) {
+    if (c === IPL) return 'IPL';
+    return c
+      .replace(/^ICC Men's /, '')
+      .replace(/ Sub Regional.*$/, ' Qual.')
+      .replace(/ tour of /, ' in ')
+      .replace(/^Big Bash League$/, 'BBL')
+      .replace(/ T20I Series$/, '')
+      .replace(/ Tri-Series$/, ' Tri');
+  }
+
+  function fmtDate(d) {
+    const [y, m, day] = d.split('-');
+    return `${day} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m - 1]}`;
+  }
+
+  function primaryTeam(p) {
+    return p.iplTeams?.[0] || '';
+  }
+
+  async function boot() {
+    const [pl, pf, mt] = await Promise.all([
+      fetch('data/players.json').then((r) => r.json()),
+      fetch('data/performances.json').then((r) => r.json()),
+      fetch('data/meta.json').then((r) => r.json()),
+    ]);
+    players = pl; perfs = pf; meta = mt;
+
+    for (const p of perfs) {
+      if (!byPlayer.has(p.playerId)) byPlayer.set(p.playerId, []);
+      byPlayer.get(p.playerId).push(p);
+    }
+
+    renderMeta();
+    renderTeams();
+    renderCompFilter();
+    render();
+  }
+
+  function renderMeta() {
+    const outside = players.filter((p) => p.competitions.some((c) => c !== IPL)).length;
+    const idle = players.filter((p) => p.innings === 0).length;
+    $('metaStrip').innerHTML = [
+      ['Players tracked', players.length],
+      ['Innings logged', meta.performances?.toLocaleString() ?? '—'],
+      ['Competitions', meta.competitions?.length ?? '—'],
+      ['Active outside the IPL', outside],
+      ['Latest match', meta.latestMatch ? fmtDate(meta.latestMatch) : '—'],
+    ].map(([k, v]) => `<li>${k} <b>${v}</b></li>`).join('');
+
+    $('footNote').textContent =
+      `Season ${new Date(meta.seasonStart).getFullYear()} to date · built ${new Date(meta.generatedAt)
+        .toISOString().slice(0, 10)} · ${idle} squad members are yet to play a tracked match.`;
+  }
+
+  function renderTeams() {
+    const teams = [...new Set(players.map(primaryTeam).filter(Boolean))].sort();
+    $('teams').innerHTML = teams.map((t) =>
+      `<button class="teamchip" data-team="${esc(t)}" aria-pressed="false">
+         <span class="dot"></span>${esc(t.replace('Royal Challengers ', 'RC ').replace('Kolkata Knight Riders','KKR'))}
+       </button>`).join('');
+
+    $('teams').addEventListener('click', (e) => {
+      const b = e.target.closest('.teamchip');
+      if (!b) return;
+      const t = b.dataset.team;
+      state.team = state.team === t ? '' : t;
+      [...$('teams').children].forEach((c) =>
+        c.setAttribute('aria-pressed', String(c.dataset.team === state.team)));
+      render();
+    });
+  }
+
+  function renderCompFilter() {
+    const comps = [...new Set(perfs.map((p) => p.competition))]
+      .sort((a, b) => (a === IPL ? -1 : b === IPL ? 1 : a.localeCompare(b)));
+    $('compFilter').insertAdjacentHTML('beforeend',
+      comps.map((c) => `<option value="${esc(c)}">${esc(shortComp(c))}</option>`).join(''));
+  }
+
+  function filtered() {
+    const q = state.q.trim().toLowerCase();
+    let out = players.filter((p) => {
+      if (state.team && primaryTeam(p) !== state.team) return false;
+      if (state.comp && !p.competitions.includes(state.comp)) return false;
+      if (state.view === 'outside' && !p.competitions.some((c) => c !== IPL)) return false;
+      if (state.view === 'idle' && p.innings > 0) return false;
+      if (q) {
+        const hay = `${p.name} ${p.listedAs ?? ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    const key = { recent: 'lastPlayed', runs: 'runs', wkts: 'wickets' }[state.sort];
+    out.sort((a, b) => {
+      if (key === 'lastPlayed') return (b.lastPlayed ?? '').localeCompare(a.lastPlayed ?? '');
+      return (b[key] ?? 0) - (a[key] ?? 0) || (b.lastPlayed ?? '').localeCompare(a.lastPlayed ?? '');
+    });
+    return out;
+  }
+
+  function render() {
+    const list = filtered();
+    $('count').textContent = `${list.length} player${list.length === 1 ? '' : 's'}`;
+
+    if (!list.length) {
+      $('roster').innerHTML =
+        `<div class="empty"><b>No players match those filters.</b>Try clearing the franchise or competition filter.</div>`;
+      return;
+    }
+
+    $('roster').innerHTML = list.map((p) => {
+      const team = primaryTeam(p);
+      const comps = p.competitions.slice().sort((a, b) => (a === IPL ? -1 : b === IPL ? 1 : 0));
+      const shown = comps.slice(0, 4);
+      const rest = comps.length - shown.length;
+
+      const chips = shown.map((c) =>
+        `<span class="comp${c === IPL ? ' ipl' : ''}">${esc(shortComp(c))}</span>`).join('') +
+        (rest > 0 ? `<span class="comp more">+${rest}</span>` : '');
+
+      const idle = p.innings === 0;
+
+      return `
+        <button class="player" data-team="${esc(team)}" data-id="${esc(p.id ?? '')}"
+                data-benched="${!p.playedIPL}" ${idle ? 'data-idle="true"' : ''}>
+          <div class="pname-cell">
+            <p class="pname">${esc(p.name)}</p>
+            ${p.listedAs && p.listedAs !== p.name ? `<span class="palias">listed as ${esc(p.listedAs)}</span>` : ''}
+          </div>
+          <div class="pteam-cell">
+            <div class="pteam">${esc(team || '—')}</div>
+            ${!p.playedIPL ? `<span class="pstatus">No IPL cap ’26</span>` : ''}
+          </div>
+          <div class="spread">${idle ? '<span class="comp more">No matches yet</span>' : chips}</div>
+          <div class="figs">
+            <div class="fig${p.runs ? '' : ' zero'}"><b>${p.runs}</b><span>runs</span></div>
+            <div class="fig${p.wickets ? '' : ' zero'}"><b>${p.wickets}</b><span>wkts</span></div>
+            <div class="fig${p.innings ? '' : ' zero'}"><b>${p.innings}</b><span>inns</span></div>
+          </div>
+        </button>`;
+    }).join('');
+  }
+
+  /* ---------- detail sheet ---------- */
+  function openPlayer(id) {
+    const p = players.find((x) => x.id === id);
+    if (!p) return;
+    const rows = (byPlayer.get(id) ?? []).slice().sort((a, b) => b.date.localeCompare(a.date));
+    const team = primaryTeam(p);
+
+    $('sheetHead').dataset.team = team;
+    $('sheet').dataset.team = team;
+    $('sheetName').textContent = p.name;
+    $('sheetSub').textContent = [team, p.listedAs && p.listedAs !== p.name ? `listed as ${p.listedAs}` : '']
+      .filter(Boolean).join('  ·  ');
+
+    const outside = rows.filter((r) => r.competition !== IPL).length;
+    const balls = rows.reduce((n, r) => n + (r.batting?.balls ?? 0), 0);
+    const sr = balls ? ((p.runs / balls) * 100).toFixed(1) : '—';
+
+    $('sheetStats').innerHTML = [
+      ['Runs', p.runs], ['Wickets', p.wickets], ['Innings', p.innings],
+      ['Strike rate', sr], ['Outside IPL', outside],
+    ].map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('');
+
+    $('sheetLog').innerHTML = rows.length ? `
+      <table>
+        <thead><tr><th>Date</th><th>Match</th><th style="text-align:right">Figures</th></tr></thead>
+        <tbody>${rows.map((r) => {
+          const b = r.batting, w = r.bowling;
+          const fifty = b && b.runs >= 50;
+          const duck = b && b.runs === 0 && b.balls > 0;
+          const bat = b && b.balls
+            ? `<span class="bat ${fifty ? 'fifty' : duck ? 'duck' : ''}">${b.runs}${b.out ? '' : '*'} (${b.balls})</span>`
+            : '';
+          const bowl = w && w.balls ? `<span class="bowl">${w.overs}–${w.runs}–${w.wickets}</span>` : '';
+          return `<tr>
+            <td class="date">${fmtDate(r.date)}</td>
+            <td class="fixture"><b>${esc(shortComp(r.competition))}</b>${esc(r.team)} v ${esc(r.opposition ?? '—')}</td>
+            <td class="perf">${bat || (bowl ? '' : '<span class="duck">dnb</span>')}${bowl}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>` : `<div class="empty"><b>No matches recorded yet.</b>This player is in an IPL squad but has not appeared in a tracked competition this season.</div>`;
+
+    $('sheetFoot').textContent = rows.length
+      ? `${rows.length} innings across ${new Set(rows.map((r) => r.competition)).size} competitions`
+      : 'Squad member · awaiting first appearance';
+
+    $('sheet').showModal();
+  }
+
+  /* ---------- events ---------- */
+  $('roster').addEventListener('click', (e) => {
+    const b = e.target.closest('.player');
+    if (b?.dataset.id) openPlayer(b.dataset.id);
+  });
+
+  $('q').addEventListener('input', (e) => { state.q = e.target.value; render(); });
+  $('compFilter').addEventListener('change', (e) => { state.comp = e.target.value; render(); });
+
+  for (const [id, val] of [['sortRecent', 'recent'], ['sortRuns', 'runs'], ['sortWkts', 'wkts']]) {
+    $(id).addEventListener('click', () => {
+      state.sort = val;
+      ['sortRecent', 'sortRuns', 'sortWkts'].forEach((x) =>
+        $(x).setAttribute('aria-pressed', String(x === id)));
+      render();
+    });
+  }
+
+  for (const [id, val] of [['viewAll', 'all'], ['viewOutside', 'outside'], ['viewIdle', 'idle']]) {
+    $(id).addEventListener('click', () => {
+      state.view = val;
+      ['viewAll', 'viewOutside', 'viewIdle'].forEach((x) =>
+        $(x).setAttribute('aria-pressed', String(x === id)));
+      render();
+    });
+  }
+
+  $('closeSheet').addEventListener('click', () => $('sheet').close());
+  $('sheet').addEventListener('click', (e) => { if (e.target === $('sheet')) $('sheet').close(); });
+
+  boot();
+</script>

@@ -1,0 +1,203 @@
+{
+  "note": "Squad-list names that cannot be resolved against the Cricsheet register automatically. Each entry pins a squad-list spelling to a canonical Cricsheet identifier, so the mapping is exact and permanent rather than re-derived by fuzzy matching on every build. Verified by cross-checking the register's cricinfo id against the player's known career. Entries under `unmapped` are deliberately left unresolved: a wrong id silently credits one player's runs to another, which is worse than a missing player.",
+  "lastUpdated": "2026-09-20",
+  "overrides": {
+    "Dushmantha Chameera": {
+      "id": "327b58d3",
+      "registerName": "PVD Chameera",
+      "cricinfo": "552152"
+    },
+    "Sai Sudharsan": {
+      "id": "d5130a30",
+      "registerName": "B Sai Sudharsan",
+      "cricinfo": "1151288"
+    },
+    "Sai Kishore": {
+      "id": "c7a995d3",
+      "registerName": "R Sai Kishore",
+      "cricinfo": "1048739"
+    },
+    "Prasidh Krishna": {
+      "id": "85e0cf10",
+      "registerName": "M Prasidh Krishna",
+      "cricinfo": "917159"
+    },
+    "Dasun Shanaka": {
+      "id": "3ff033bb",
+      "registerName": "MD Shanaka",
+      "cricinfo": "437316"
+    },
+    "Rinku Singh": {
+      "id": "0a509d6b",
+      "registerName": "RK Singh",
+      "cricinfo": "723105"
+    },
+    "Connor Esterhuizen": {
+      "id": "ef9acbcc",
+      "registerName": "C Esterhuizen",
+      "cricinfo": "1070997"
+    },
+    "Mukesh Choudhary": {
+      "id": "765a4731",
+      "registerName": "Mukesh Choudhary",
+      "cricinfo": "1125688"
+    },
+    "Ashutosh Sharma": {
+      "id": "84d9c311",
+      "registerName": "Ashutosh Sharma",
+      "cricinfo": "1131978"
+    },
+    "Rehan Ahmed": {
+      "id": "0ecb4de6",
+      "registerName": "Rehan Ahmed",
+      "cricinfo": "1263691"
+    },
+    "Anuj Rawat": {
+      "id": "c8f5f961",
+      "registerName": "Anuj Rawat",
+      "cricinfo": "1123073"
+    },
+    "Ajay Mandal": {
+      "id": "31ee319e",
+      "registerName": "Ajay Mandal",
+      "cricinfo": "1059570"
+    },
+    "Arshad Khan": {
+      "id": "12314277",
+      "registerName": "Arshad Khan (2)",
+      "cricinfo": "1244751"
+    },
+    "Ashok Sharma": {
+      "id": "50c09020",
+      "registerName": "Ashok Sharma",
+      "cricinfo": "1299879"
+    },
+    "Dian Forrester": {
+      "id": "23393635",
+      "registerName": "Dian Forrester",
+      "cricinfo": "696471"
+    },
+    "Arshdeep Singh": {
+      "id": "244048f6",
+      "registerName": "Arshdeep Singh",
+      "cricinfo": "1125976"
+    },
+    "Sandeep Sharma": {
+      "id": "ce820073",
+      "registerName": "Sandeep Sharma",
+      "cricinfo": "438362"
+    },
+    "Yash Dayal": {
+      "id": "7210d461",
+      "registerName": "Yash Dayal",
+      "cricinfo": "1159720"
+    },
+    "Suyash Sharma": {
+      "id": "9440ef41",
+      "registerName": "Suyash Sharma",
+      "cricinfo": "1350792"
+    },
+    "Abhinandan Singh": {
+      "id": "82c10dac",
+      "registerName": "Abhinandan Singh",
+      "cricinfo": "1449085"
+    },
+    "Abhishek Sharma": {
+      "id": "f29185a1",
+      "registerName": "Abhishek Sharma",
+      "cricinfo": "1070183"
+    },
+    "Zeeshan Ansari": {
+      "id": "36619795",
+      "registerName": "Zeeshan Ansari",
+      "cricinfo": "942371"
+    },
+    "Yudhvir Singh Charak": {
+      "id": "4885bbe6",
+      "registerName": "Yudhvir Singh",
+      "cricinfo": "1206052"
+    },
+    "Shubham Dubey": {
+      "id": "6b2ff18f",
+      "registerName": "SB Dubey",
+      "cricinfo": "1252585"
+    },
+    "Prithvi Shaw": {
+      "id": "8b3e9c7c",
+      "registerName": "PP Shaw",
+      "cricinfo": "1070168"
+    },
+    "Avesh Khan": {
+      "id": "eef2536f",
+      "registerName": "Avesh Khan",
+      "cricinfo": "694211"
+    },
+    "Rohit Sharma": {
+      "id": "740742ef",
+      "registerName": "RG Sharma",
+      "cricinfo": "34102"
+    },
+    "Prabhsimran Singh": {
+      "id": "9418198b",
+      "registerName": "P Simran Singh",
+      "cricinfo": "1161024"
+    },
+    "Kamindu Mendis": {
+      "id": "08548b13",
+      "registerName": "PHKD Mendis",
+      "cricinfo": "784373"
+    },
+    "Varun Chakaravarthy": {
+      "id": "5b7ab5a9",
+      "registerName": "CV Varun",
+      "cricinfo": "1108375"
+    },
+    "Shahbaz Ahamad": {
+      "id": "f9e6e7ef",
+      "registerName": "Shahbaz Ahmed",
+      "cricinfo": "1159711"
+    },
+    "N. Tilak Varma": {
+      "id": "b0482a1d",
+      "registerName": "Tilak Varma",
+      "cricinfo": "1170265"
+    },
+    "Vyshak Vijaykumar": {
+      "id": "54e52590",
+      "registerName": "Vijaykumar Vyshak",
+      "cricinfo": "777815"
+    },
+    "Vaibhav Sooryavanshi": {
+      "id": "470f446b",
+      "registerName": "V Suryavanshi",
+      "cricinfo": "1408688"
+    }
+  },
+  "unmapped": {
+    "note": "Uncontracted/fringe names with no confident register match. Most are uncapped domestic players who may genuinely have no Cricsheet record yet. They are tracked as squad members with no performance history until a match links them.",
+    "names": [
+      "Macneil Noronha",
+      "Daksh Kamra",
+      "Mohammed Salahuddin Izhar",
+      "Pyla Avinash",
+      "Harnoor Pannu",
+      "Vishal Nishad",
+      "Aman Rao Perala",
+      "Emanjot Singh Chahal",
+      "Vicky Ostwal",
+      "Satvik Deswal",
+      "Kanishk Chouhan",
+      "Smaran-R",
+      "Krains Fuletra",
+      "Onkar Tukaram Tarmale",
+      "RS Ambrish",
+      "Mukul Choudhary",
+      "Akash Singh",
+      "Raghu Sharma",
+      "Mayank Rawat",
+      "Ramandeep Singh",
+      "Saurabh Dubey",
+      "Prashant Solanki"
+    ]
+  }
+}

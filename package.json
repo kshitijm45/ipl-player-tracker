@@ -1,0 +1,13 @@
+{
+  "name": "ipl-player-tracker",
+  "version": "0.1.0",
+  "description": "Unified cross-tournament performance tracker for IPL players",
+  "type": "module",
+  "main": "src/cli/index.js",
+  "scripts": {
+    "setup": "node src/cli/setup.js",
+    "track": "node src/cli/index.js",
+    "digest": "node src/cli/digest.js"
+  },
+  "license": "MIT"
+}
