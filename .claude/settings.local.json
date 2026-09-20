@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "WebSearch",
+      "Bash(node --test src/core/registry.test.js)",
+      "Bash(git add *)",
+      "Bash(git -c user.email=sanjaymitra1947@gmail.com -c user.name=kshitij commit -q -m ' *)"
+    ]
+  }
+}
