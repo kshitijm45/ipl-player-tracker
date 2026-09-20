@@ -35,6 +35,35 @@ function preferName(crexName, cricsheetName) {
   return cricsheetName ?? crexName ?? null;
 }
 
+/** Country codes CREX uses in fixture strings and tournament labels. */
+const NATION = {
+  IND: 'India', AUS: 'Australia', ENG: 'England', SA: 'South Africa', NZ: 'New Zealand',
+  PAK: 'Pakistan', SL: 'Sri Lanka', WI: 'West Indies', BAN: 'Bangladesh', AFG: 'Afghanistan',
+  ZIM: 'Zimbabwe', IRE: 'Ireland', SCO: 'Scotland', NED: 'Netherlands', NAM: 'Namibia',
+  UAE: 'United Arab Emirates', NEP: 'Nepal', OMA: 'Oman', USA: 'United States', CAN: 'Canada',
+};
+
+/**
+ * "AUS vs ZIM 2026" is how CREX labels a bilateral series, which reads as a code
+ * rather than a fixture once it reaches the page. Expand the countries and turn the
+ * label into the tour phrasing the rest of the site uses.
+ */
+export function expandCompetition(label) {
+  if (!label) return label;
+  const m = String(label).match(/^([A-Z]{2,4})\s+vs\s+([A-Z]{2,4})\s*(\d{4}(?:-\d{2})?)?$/);
+  if (!m) return label;
+  const [, a, b, year] = m;
+  const A = NATION[a] ?? a;
+  const B = NATION[b] ?? b;
+  return `${B} in ${A}${year ? ` ${year}` : ''}`;
+}
+
+/** Expand a team code, leaving anything already spelled out untouched. */
+export function expandTeam(code) {
+  if (!code) return code;
+  return CODE_TO_TEAM[code] ?? NATION[code] ?? code;
+}
+
 export function mergePerformances({ crexRows = [], cricsheetRows = [], today } = {}) {
   const merged = new Map();
   const cutoff = today ?? new Date().toISOString().slice(0, 10);
@@ -57,9 +86,16 @@ export function mergePerformances({ crexRows = [], cricsheetRows = [], today } =
     const existing = merged.get(k);
 
     if (!existing) {
+      // CREX carries the opponent inside the fixture string ("3rd T20 vs SL") rather
+      // than as its own field, so recover it there before the row reaches the page —
+      // otherwise every CREX-only row reads "AUS v —".
+      const opp = c.opponent ?? c.fixture?.match(/\bvs\s+([A-Za-z ]+)$/i)?.[1]?.trim() ?? null;
+
       merged.set(k, {
         ...c,
-        team: CODE_TO_TEAM[c.team] ?? c.team,
+        team: expandTeam(c.team),
+        opposition: expandTeam(c.opposition ?? opp),
+        competition: expandCompetition(c.competition),
         sources: ['crex'],
         // A CREX-only row has no ball-by-ball backing, so mark it: the UI can then
         // avoid implying a precision the row does not have.

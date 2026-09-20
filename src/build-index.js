@@ -102,6 +102,8 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
       iplTeamPlayedFor: played,
       changeEntry: change,
     });
+    // Status is derived but not surfaced: every player on a franchise's books is
+    // shown as part of that squad, whatever the reason they came or went.
     t.squadStatus = status;
     t.squadReason = reason;
     if (team && !t.teams?.length) t.teams = [team];
@@ -158,8 +160,6 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
       iplTeams: t.teams ?? [],
       inSquad: t.inSquad ?? false,
       playedIPL: t.playedIPL ?? false,
-      squadStatus: t.squadStatus ?? 'active',
-      squadReason: t.squadReason ?? null,
       lastIplAppearance: t.lastIplAppearance ?? null,
       unmapped: Boolean(t.unmapped),
       teams: new Set(),
