@@ -26,6 +26,11 @@ const crexPins = existsSync(CREX_PATH) ? JSON.parse(readFileSync(CREX_PATH, 'utf
 const CREX_PERF_PATH = new URL('../data/crex-performances.json', import.meta.url).pathname;
 const CHANGES_PATH = new URL('../data/squad-changes-2026.json', import.meta.url).pathname;
 const squadChanges = existsSync(CHANGES_PATH) ? JSON.parse(readFileSync(CHANGES_PATH, 'utf8')) : { changes: [] };
+// Verified CREX spellings the automatic name guard cannot confirm on its own.
+const OVERRIDE_FILE = new URL('../data/player-overrides.json', import.meta.url).pathname;
+const trustedCrex = existsSync(OVERRIDE_FILE)
+  ? JSON.parse(readFileSync(OVERRIDE_FILE, 'utf8')).trustedCrexNames ?? {}
+  : {};
 
 const SEASON_START = process.env.SEASON_START ?? '2026-01-01';
 const OUT_DIR = new URL('../site/data', import.meta.url).pathname;
@@ -151,7 +156,8 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
       id: t.id ?? null,
       // What the page shows: the common name, falling back to the register name.
       name: stripDisambiguator(
-        displayName({ registerName, listedAs: t.listedAs, crexName: crex?.displayName })
+        trustedCrex[registerName] ??
+          displayName({ registerName, listedAs: t.listedAs, crexName: crex?.displayName })
       ),
       registerName,
       crexSlug: crex?.slug ?? null,

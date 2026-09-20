@@ -76,3 +76,28 @@ test('unknown players are reported, not invented', () => {
   assert.equal(res.player, null);
   assert.equal(res.confidence, 'unknown');
 });
+
+test('a CREX name only overrides when it can be the same player', async () => {
+  const { displayName, sameSurname } = await import('./display-name.js');
+
+  // The real bug: a mispinned slug put "Ankush Kumar" over Ashwani Kumar. Same
+  // surname, different cricketer — the override must be refused.
+  assert.equal(sameSurname('Ankush Kumar', 'Ashwani Kumar'), false);
+  assert.equal(
+    displayName({ registerName: 'Ashwani Kumar', crexName: 'Ankush Kumar' }),
+    'Ashwani Kumar'
+  );
+
+  // Legitimate expansions of an initialled register name must still apply.
+  for (const [reg, crex] of [
+    ['MD Shanaka', 'Dasun Shanaka'],
+    ['YBK Jaiswal', 'Yashasvi Jaiswal'],
+    ['PVD Chameera', 'Dushmantha Chameera'],
+    ['KK Ahmed', 'Khaleel Ahmed'],
+  ]) {
+    assert.equal(displayName({ registerName: reg, crexName: crex }), crex, `${reg} -> ${crex}`);
+  }
+
+  // Different surnames never merge.
+  assert.equal(sameSurname('Mukesh Choudhary', 'Mukesh Kumar'), false);
+});

@@ -578,7 +578,16 @@
     border: 1px solid var(--line);
     border-bottom: 0;
   }
-  .spark { display: flex; align-items: flex-end; gap: 7px; height: 92px; margin-top: 18px; }
+  /* Two charts side by side, stacking on narrow screens. */
+  .twin { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; margin-top: 16px; }
+  .mini {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--ink-2);
+    letter-spacing: .01em;
+    margin-bottom: 4px;
+  }
+  .spark { display: flex; align-items: flex-end; gap: 7px; height: 92px; margin-top: 10px; }
   .sp { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 7px; }
   .sp i {
     display: block;
@@ -731,6 +740,7 @@
     .row .where { grid-column: 2 / -1; }
     .phero { padding: 32px 24px 28px; }
     .pstats > div { padding: 19px 22px; }
+    .twin { grid-template-columns: 1fr; gap: 24px; }
     .ledger td, .ledger thead th { padding-inline: 20px; }
     .gap { height: 52px; }
   }
@@ -855,11 +865,6 @@ function drawRail() {
   const clubs = [...new Set(P.map(club1).filter(Boolean))].sort();
 
   $('clubs').innerHTML = `
-    <button class="club-all" data-c="" aria-current="${!S.club}">
-      <span class="all-mark">ALL</span>
-      <span class="club-name">Every franchise</span>
-      <span class="club-n">${P.length}</span>
-    </button>
     ${clubs.map((c) => {
       const squad = P.filter((p) => club1(p) === c);
       const on = S.club === c;
@@ -874,7 +879,7 @@ function drawRail() {
 }
 
 $('clubs').addEventListener('click', (e) => {
-  const cb = e.target.closest('.club-btn, .club-all');
+  const cb = e.target.closest('.club-btn');
   if (!cb) return;
   const c = cb.dataset.c ?? '';
   // Re-picking the current club clears the scope rather than doing nothing.
@@ -1040,14 +1045,28 @@ function drawPlayer() {
   const avg = outs ? (runs / outs).toFixed(1) : runs ? '—' : '0';
   const best = all.reduce((b, r) => Math.max(b, r.batting?.runs ?? 0), 0);
 
-  const peak = Math.max(10, ...last.map((r) => r.batting?.runs ?? 0));
+  // Both disciplines, always. A bowler's page should not be a wall of empty bars,
+  // and an allrounder's form is only legible when batting and bowling sit together.
+  const batPeak = Math.max(10, ...last.map((r) => r.batting?.runs ?? 0));
+  const bowlPeak = Math.max(2, ...last.map((r) => r.bowling?.wickets ?? 0));
+
   const spark = last.slice().reverse().map((r) => {
     const batted = Boolean(r.batting?.balls);
     const v = r.batting?.runs ?? 0;
-    const h = batted ? Math.max(5, Math.round((v / peak) * 72)) : 4;
+    const h = batted ? Math.max(5, Math.round((v / batPeak) * 72)) : 4;
     const cls = !batted ? 'dnb' : v === 0 ? 'nil' : v >= 50 ? 'fifty' : '';
     const tip = `${comp(r.competition)} · ${dShort(r.date)} · ${batted ? `${v}${r.batting.out ? '' : ' not out'} off ${r.batting.balls}` : 'did not bat'}`;
     return `<span class="sp ${cls}" title="${esc(tip)}"><i style="height:${h}px"></i><em>${batted ? v : '·'}</em></span>`;
+  }).join('');
+
+  const bowlSpark = last.slice().reverse().map((r) => {
+    const bowled = Boolean(r.bowling?.balls || r.bowling?.wickets);
+    const w = r.bowling?.wickets ?? 0;
+    const h = bowled ? Math.max(5, Math.round((w / bowlPeak) * 72)) : 4;
+    const cls = !bowled ? 'dnb' : w === 0 ? 'nil' : w >= 3 ? 'fifty' : '';
+    const fig = r.bowling?.overs ? `${r.bowling.overs}–${r.bowling.runs}–${w}` : `${w}/${r.bowling?.runs ?? 0}`;
+    const tip = `${comp(r.competition)} · ${dShort(r.date)} · ${bowled ? fig : 'did not bowl'}`;
+    return `<span class="sp ${cls}" title="${esc(tip)}"><i style="height:${h}px"></i><em>${bowled ? w : '·'}</em></span>`;
   }).join('');
 
   $('stage').innerHTML = `
@@ -1070,8 +1089,17 @@ function drawPlayer() {
         <div><b>${best}</b><span class="eyebrow">Best</span></div>
       </div>
       ${last.length ? `<div class="formbox">
-        <div class="eyebrow">Recent form — last ${last.length} innings, oldest first</div>
-        <div class="spark">${spark}</div>
+        <div class="eyebrow">Recent form — last ${last.length} matches, oldest first</div>
+        <div class="twin">
+          <div>
+            <div class="mini">Runs scored</div>
+            <div class="spark">${spark}</div>
+          </div>
+          <div>
+            <div class="mini">Wickets taken</div>
+            <div class="spark">${bowlSpark}</div>
+          </div>
+        </div>
       </div>` : ''}
       <div class="ledger">
         ${all.length ? `<div class="scroller"><table>

@@ -1,5 +1,5 @@
 {
-  "note": "Squad-list names that cannot be resolved against the Cricsheet register automatically. Each entry pins a squad-list spelling to a canonical Cricsheet identifier, so the mapping is exact and permanent rather than re-derived by fuzzy matching on every build. Verified by cross-checking the register's cricinfo id against the player's known career. Entries under `unmapped` are deliberately left unresolved: a wrong id silently credits one player's runs to another, which is worse than a missing player.",
+  "note": "Squad-list names that cannot be resolved against the Cricsheet register automatically. Each entry pins a squad-list spelling to a canonical Cricsheet identifier, so the mapping is exact and permanent rather than re-derived by fuzzy matching on every build. Verified by cross-checking the register's cricinfo id against the player's known career. Entries under `unmapped` are deliberately left unresolved: a wrong id silently credits one player's runs to another, which is worse than a missing player. `trustedCrexNames` whitelists CREX spellings the automatic name guard rejects but a human has verified.",
   "lastUpdated": "2026-09-20",
   "overrides": {
     "Dushmantha Chameera": {
@@ -171,6 +171,11 @@
       "id": "470f446b",
       "registerName": "V Suryavanshi",
       "cricinfo": "1408688"
+    },
+    "Mahipal Lomror": {
+      "id": "da934ee8",
+      "registerName": "MK Lomror",
+      "cricinfo": "853265"
     }
   },
   "unmapped": {
@@ -197,7 +202,11 @@
       "Mayank Rawat",
       "Ramandeep Singh",
       "Saurabh Dubey",
-      "Prashant Solanki"
+      "Prashant Solanki",
+      "Ruchit Ahir"
     ]
+  },
+  "trustedCrexNames": {
+    "P Simran Singh": "Prabhsimran Singh"
   }
 }

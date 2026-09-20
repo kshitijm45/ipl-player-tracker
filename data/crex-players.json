@@ -227,11 +227,6 @@
       "code": "BG",
       "displayName": "Shardul Thakur"
     },
-    "26989d80": {
-      "slug": "shamsher-singh-HJJ",
-      "code": "HJJ",
-      "displayName": "Shamsher Singh"
-    },
     "81c36ee9": {
       "slug": "marco-jansen-2OR",
       "code": "2OR",
@@ -651,16 +646,6 @@
       "slug": "sushant-mishra-16Y",
       "code": "16Y",
       "displayName": "S Mishra"
-    },
-    "cc61ee8f": {
-      "slug": "gurjit-singh-HZG",
-      "code": "HZG",
-      "displayName": "Gurjit Singh"
-    },
-    "d45c29b1": {
-      "slug": "ankush-kumar-EME",
-      "code": "EME",
-      "displayName": "Ankush Kumar"
     }
   },
   "bySlug": {
