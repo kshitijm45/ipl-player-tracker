@@ -254,7 +254,8 @@
     font-size: 10.5px;
     color: #8296B2;
   }
-  .chev { transition: transform .18s ease; flex: none; opacity: .6; }
+  .chev { transition: transform .18s ease; flex: none; opacity: .55; padding: 3px; margin: -3px; border-radius: 3px; }
+  .chev:hover { opacity: 1; background: rgba(255,255,255,.14); }
   .team-btn[aria-expanded="true"] .chev { transform: rotate(90deg); }
 
   .squad { display: none; padding: 2px 0 6px 21px; }
@@ -632,6 +633,80 @@
   .card .cf div span { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); font-family: "Barlow Condensed", sans-serif; font-weight: 600; }
   .card .cz b { color: var(--ink-3); font-weight: 400; }
 
+  /* ---------- team page ---------- */
+  .team-hero {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    background: var(--team);
+    color: var(--team-ink);
+    border: 0;
+    border-bottom: 3px solid var(--team-2);
+    padding: 20px 22px;
+  }
+  .th-main { flex: 1; min-width: 200px; }
+  .team-hero h2 {
+    font-family: "Barlow Condensed", sans-serif;
+    font-size: clamp(26px, 3.4vw, 38px);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .01em;
+    line-height: .95;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .th-sub { font-family: "Roboto Mono", monospace; font-size: var(--f-xs); opacity: .9; margin-top: 6px; }
+  .th-figs { display: flex; gap: 24px; }
+  .th-figs b {
+    display: block;
+    font-family: "Roboto Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1;
+  }
+  .th-figs span {
+    font-family: "Barlow Condensed", sans-serif;
+    font-size: var(--f-xs);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    opacity: .85;
+    font-weight: 600;
+  }
+
+  .dayblock { margin-bottom: 14px; }
+  .dayblock-head {
+    font-size: 15px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink-3);
+    padding: 0 2px 6px;
+  }
+
+  .outlist { overflow: hidden; }
+  .outrow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) auto;
+    gap: 14px;
+    align-items: baseline;
+    width: 100%;
+    padding: 11px 16px;
+    background: var(--panel);
+    border: 0;
+    border-bottom: 1px solid var(--rule);
+    border-left: 3px solid var(--ipl-gold);
+    text-align: left;
+    cursor: pointer;
+  }
+  .outrow:last-child { border-bottom: 0; }
+  .outrow:hover { background: var(--panel-2); }
+  .outrow:focus-visible { outline: 2px solid var(--team); outline-offset: -2px; }
+  .or-name { font-weight: 600; }
+  .or-reason { font-size: var(--f-sm); color: var(--warn); }
+  .or-last { font-family: "Roboto Mono", monospace; font-size: var(--f-xs); color: var(--ink-3); text-align: right; white-space: nowrap; }
+
   .mobile-side { display: none; }
 
   @media (max-width: 900px) {
@@ -687,6 +762,7 @@
       <div class="tabs" role="tablist">
         <button class="tab" id="tabDaily" role="tab" aria-selected="true">Daily</button>
         <button class="tab" id="tabSquad" role="tab" aria-selected="false">Squads</button>
+        <button class="tab" id="tabTeam" role="tab" aria-selected="false">Team</button>
       </div>
       <div class="fmt" role="group" aria-label="Format">
         <button data-fmt="" aria-pressed="true">ALL</button>
@@ -755,7 +831,7 @@ function renderSidebar() {
         <span class="swatch"></span>
         <span class="team-name">${esc(t)}</span>
         <span class="team-count">${squad.length}</span>
-        <svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m9 6 6 6-6 6"/></svg>
+        <svg class="chev" role="button" aria-label="Toggle squad" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m9 6 6 6-6 6"/></svg>
       </button>
       <div class="squad${open ? ' open' : ''}">
         ${squad.map((p) => `
@@ -775,8 +851,19 @@ function renderSidebar() {
 $('teamNav').addEventListener('click', (e) => {
   const tb = e.target.closest('.team-btn');
   if (tb) {
-    S.team = S.team === tb.dataset.t ? '' : tb.dataset.t;
+    // The chevron expands the squad in place; the name opens the team's page.
+    const justToggle = e.target.closest('.chev');
+    const t = tb.dataset.t;
+    if (justToggle) {
+      S.team = S.team === t ? '' : t;
+      renderSidebar();
+      return;
+    }
+    S.team = t;
+    S.tab = 'team';
+    S.player = null;
     renderSidebar();
+    render();
     return;
   }
   const pb = e.target.closest('.sq-player');
@@ -796,9 +883,101 @@ $('psearch').addEventListener('input', (e) => { S.q = e.target.value; renderSide
 function render() {
   $('tabDaily').setAttribute('aria-selected', String(S.tab === 'daily'));
   $('tabSquad').setAttribute('aria-selected', String(S.tab === 'squad'));
+  const tt = $('tabTeam');
+  tt.setAttribute('aria-selected', String(S.tab === 'team'));
+  tt.hidden = !S.team;
+  tt.textContent = S.team ? S.team.replace('Royal Challengers ', 'RC ').replace('Kolkata Knight Riders', 'KKR') : 'Team';
   if (S.tab === 'daily') renderDaily();
   else if (S.tab === 'player') renderPlayer();
+  else if (S.tab === 'team') renderTeam();
   else renderSquad();
+}
+
+/* ---- team page: one franchise, its squad and its day-to-day ---- */
+function renderTeam() {
+  const t = S.team;
+  if (!t) { S.tab = 'squad'; render(); return; }
+
+  const squad = PLAYERS.filter((p) => team1(p) === t);
+  const ids = new Set(squad.map((p) => p.id));
+  const perfs = PERFS.filter((r) => ids.has(r.playerId) && matchesFmt(r));
+
+  // Recent days on which anyone from this squad played, newest first.
+  const dayMap = new Map();
+  for (const r of perfs) {
+    if (!dayMap.has(r.date)) dayMap.set(r.date, []);
+    dayMap.get(r.date).push(r);
+  }
+  const days = [...dayMap.entries()].sort((a, b) => b[0].localeCompare(a[0])).slice(0, 8);
+
+  const runs = perfs.reduce((n, r) => n + (r.batting?.runs ?? 0), 0);
+  const wkts = perfs.reduce((n, r) => n + (r.bowling?.wickets ?? 0), 0);
+  const outNow = squad.filter((p) => p.squadStatus === 'replaced');
+  const activeElsewhere = squad.filter((p) => (p.competitions ?? []).some((c) => c !== IPL)).length;
+
+  $('view').innerHTML = `
+    <div class="panel team-hero" data-team="${esc(t)}">
+      <div class="th-main">
+        <h2>${esc(t)}</h2>
+        <div class="th-sub">${squad.length} players tracked · ${activeElsewhere} active outside the IPL</div>
+      </div>
+      <div class="th-figs">
+        <div><b>${runs}</b><span>Runs</span></div>
+        <div><b>${wkts}</b><span>Wickets</span></div>
+        <div><b>${perfs.length}</b><span>Innings</span></div>
+      </div>
+    </div>
+
+    ${outNow.length ? `
+      <div class="sect-head" style="margin-top:20px">
+        <h2>Out of the squad</h2>
+        <span class="sub">Still tracked wherever they play next</span>
+      </div>
+      <div class="panel outlist">
+        ${outNow.map((p) => `
+          <button class="outrow" data-team="${esc(t)}" data-id="${esc(p.id ?? '')}">
+            <span class="or-name">${esc(p.name)}</span>
+            <span class="or-reason">${esc(p.squadReason ?? 'left the squad')}</span>
+            <span class="or-last">${p.lastPlayed ? 'last played ' + fmtDay(p.lastPlayed) : 'no matches'}</span>
+          </button>`).join('')}
+      </div>` : ''}
+
+    <div class="sect-head" style="margin-top:20px">
+      <h2>Day by day</h2>
+      <span class="sub">Most recent play by ${esc(t)} players</span>
+    </div>
+    ${days.length ? days.map(([date, rows]) => `
+      <div class="dayblock">
+        <div class="dayblock-head cond">${fmtLong(date)}</div>
+        <div class="panel">${rows.sort(sortByImpact).map(dayRow).join('')}</div>
+      </div>`).join('') : `<div class="panel empty"><b>No recent play</b>No ${esc(t)} player has appeared in a tracked match${S.fmt ? ` in ${S.fmt}` : ''}.</div>`}
+
+    <div class="sect-head" style="margin-top:22px">
+      <h2>Full squad</h2>
+      <span class="sub">${squad.length} players</span>
+    </div>
+    <div class="grid">
+      ${squad.slice().sort((a, b) => b.runs - a.runs).map((p) => `
+        <button class="card" data-team="${esc(t)}" data-id="${esc(p.id ?? '')}" data-status="${esc(p.squadStatus ?? 'active')}">
+          <h3>${esc(p.name)}</h3>
+          <div class="ct">${p.squadStatus === 'replaced' ? 'Out — ' + esc(p.squadReason ?? 'left squad') : p.squadStatus === 'partial' ? 'Part season — ' + esc(p.squadReason ?? '') : esc((p.formats ?? []).join(' · ') || 'No matches yet')}</div>
+          <div class="cf">
+            <div class="${p.runs ? '' : 'cz'}"><b>${p.runs}</b><span>Runs</span></div>
+            <div class="${p.wickets ? '' : 'cz'}"><b>${p.wickets}</b><span>Wkts</span></div>
+            <div class="${p.innings ? '' : 'cz'}"><b>${p.innings}</b><span>Inns</span></div>
+          </div>
+        </button>`).join('')}
+    </div>`;
+
+  $('view').querySelectorAll('.card, .dayrow, .outrow').forEach((el) => {
+    el.onclick = () => {
+      if (!el.dataset.id) return;
+      S.player = el.dataset.id;
+      S.tab = 'player';
+      renderSidebar();
+      render();
+    };
+  });
 }
 
 /* ---- daily tracker ---- */
@@ -990,6 +1169,7 @@ function renderSquad() {
 /* ---------------- events ---------------- */
 $('tabDaily').onclick = () => { S.tab = 'daily'; render(); };
 $('tabSquad').onclick = () => { S.tab = 'squad'; render(); };
+$('tabTeam').onclick = () => { if (S.team) { S.tab = 'team'; render(); } };
 
 document.querySelectorAll('.fmt button').forEach((b) => {
   b.onclick = () => {

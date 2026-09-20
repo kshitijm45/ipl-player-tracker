@@ -1,20 +1,53 @@
 {
-  "note": "Mid-season squad changes. Public squad listings show only the *current* roster, so a player ruled out through injury silently disappears from them — even though he was contracted, played part of the season, and is still someone fans follow. This file restores those players and records why they left, so the tracker keeps following them wherever they play next.",
+  "note": "Mid-season squad changes for IPL 2026. Public squad listings show only the *current* roster, so a player ruled out silently disappears from them — even though he was contracted, often played part of the season, and is still someone fans follow. This file restores those players, records why they left, and links each to the player signed in his place. Reasons come from reporting (ESPNcricinfo, Yahoo Sports); the tracker can derive *that* a player left from scorecards, but never *why*.",
   "season": 2026,
   "lastUpdated": "2026-09-20",
+  "sources": [
+    "https://www.espn.com/cricket/story/_/id/48268093/ipl-2026-list-injured-unavailable-players-kkr-csk-srh-rr-dc-pbks",
+    "https://sports.yahoo.com/articles/ipl-2026-injury-replacements-full-143515980.html",
+    "https://www.tribuneindia.com/news/sports/ipl-2026-csk-replace-injured-khaleel-ahmed-with-kuldip-yadav/"
+  ],
   "statuses": {
     "active": "On the roster and available.",
     "replaced": "Was in the squad but ruled out (injury/withdrawal). Still tracked — often the player whose recovery and return fans most want to follow.",
-    "replacement": "Signed mid-season to cover a replaced player."
+    "replacement": "Signed mid-season to cover a replaced player.",
+    "partial": "In the squad but missed part of the season (late arrival, early departure, workload)."
   },
   "changes": [
-    {
-      "team": "Chennai Super Kings",
-      "player": "Jamie Overton",
-      "status": "replaced",
-      "reason": "injury",
-      "lastAppearance": "2026-05-10",
-      "note": "Played 10 IPL matches for CSK before being ruled out; dropped from published squad listings thereafter."
-    }
+    { "team": "Chennai Super Kings", "player": "Nathan Ellis", "status": "replaced", "reason": "hamstring injury", "replacedBy": "Spencer Johnson", "note": "Out for the full season." },
+    { "team": "Chennai Super Kings", "player": "Khaleel Ahmed", "status": "replaced", "reason": "right quadricep injury", "replacedBy": "Kuldip Yadav", "lastAppearance": "2026-04-16", "note": "Injured against KKR at Chepauk on 16 April; out for the remainder." },
+    { "team": "Chennai Super Kings", "player": "Ayush Mhatre", "status": "replaced", "reason": "injury", "replacedBy": "Akash Madhwal" },
+    { "team": "Chennai Super Kings", "player": "Ramakrishna Ghosh", "status": "replaced", "reason": "injury", "replacedBy": "Macneil Noronha" },
+    { "team": "Chennai Super Kings", "player": "Jamie Overton", "status": "replaced", "reason": "injury", "lastAppearance": "2026-05-10", "note": "Played 10 IPL matches before being ruled out." },
+    { "team": "Chennai Super Kings", "player": "MS Dhoni", "status": "partial", "reason": "calf strain", "note": "Missed roughly the first two weeks." },
+
+    { "team": "Kolkata Knight Riders", "player": "Harshit Rana", "status": "replaced", "reason": "knee surgery", "replacedBy": "Navdeep Saini", "note": "Injured in a T20 World Cup warm-up; out for the season." },
+    { "team": "Kolkata Knight Riders", "player": "Akash Deep", "status": "replaced", "reason": "lower-back stress injury", "replacedBy": "Saurabh Dubey" },
+    { "team": "Kolkata Knight Riders", "player": "Matheesha Pathirana", "status": "partial", "reason": "calf strain", "note": "Available from mid-April." },
+
+    { "team": "Sunrisers Hyderabad", "player": "Jack Edwards", "status": "replaced", "reason": "foot injury", "replacedBy": "Dilshan Madushanka", "note": "Out for the full tournament." },
+    { "team": "Sunrisers Hyderabad", "player": "David Payne", "status": "replaced", "reason": "injury", "replacedBy": "Gerald Coetzee" },
+    { "team": "Sunrisers Hyderabad", "player": "Brydon Carse", "status": "replaced", "reason": "injury" },
+    { "team": "Sunrisers Hyderabad", "player": "Pat Cummins", "status": "partial", "reason": "lumbar stress injury", "note": "Missed the opening matches; returned mid-tournament." },
+
+    { "team": "Rajasthan Royals", "player": "Sam Curran", "status": "replaced", "reason": "groin injury", "replacedBy": "Dasun Shanaka", "note": "Picked up after the T20 World Cup; out for the season." },
+    { "team": "Rajasthan Royals", "player": "Adam Milne", "status": "replaced", "reason": "injury", "replacedBy": "Kyle Jamieson" },
+
+    { "team": "Royal Challengers Bengaluru", "player": "Nuwan Thushara", "status": "replaced", "reason": "injury", "replacedBy": "Richard Gleeson" },
+    { "team": "Royal Challengers Bengaluru", "player": "Yash Dayal", "status": "replaced", "reason": "personal reasons", "note": "Unavailable for the whole season." },
+    { "team": "Royal Challengers Bengaluru", "player": "Josh Hazlewood", "status": "partial", "reason": "hamstring and Achilles", "note": "Missed the early matches." },
+
+    { "team": "Mumbai Indians", "player": "Mitchell Santner", "status": "replaced", "reason": "injury", "replacedBy": "Keshav Maharaj" },
+
+    { "team": "Gujarat Titans", "player": "Prithviraj Yarra", "status": "replaced", "reason": "injury", "replacedBy": "Tom Banton" },
+    { "team": "Gujarat Titans", "player": "Tom Banton", "status": "partial", "reason": "injury", "note": "Signed as a replacement, then himself added to the injury list." },
+
+    { "team": "Lucknow Super Giants", "player": "Wanindu Hasaranga", "status": "replaced", "reason": "injury", "replacedBy": "George Linde" },
+    { "team": "Lucknow Super Giants", "player": "Josh Inglis", "status": "replaced", "reason": "personal — wedding", "note": "Unavailable for the season." },
+
+    { "team": "Delhi Capitals", "player": "Ben Duckett", "status": "replaced", "reason": "withdrew to focus on Test cricket" },
+    { "team": "Delhi Capitals", "player": "Mitchell Starc", "status": "partial", "reason": "workload management", "note": "Joined later in the season." },
+
+    { "team": "Punjab Kings", "player": "Lockie Ferguson", "status": "partial", "reason": "personal — newborn", "note": "Missed the early matches." }
   ]
 }

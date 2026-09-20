@@ -140,15 +140,25 @@ export class CrexSource extends Source {
   }
 
   /**
-   * Recent innings for a player, already split by format on the page.
-   * Returns rows shaped like { format, competition, date, opponent, score, ... }.
+   * Every innings CREX holds for a player, across every tournament.
+   *
+   * The player's matches page opens on the most recent tournament only — four rows
+   * for a player who has actually had a full season. The rest sit behind the
+   * tournament cards (`div.sCard`), which are clickable despite carrying no href:
+   * clicking one re-renders the table with that tournament's full innings list
+   * (Archer's IPL card yields all 10 innings, Qualifier and Eliminator included).
+   *
+   * So a full read walks the cards in turn. `batting` and `bowling` are separate
+   * views of the same table, so each card is read twice and the two merged by fixture.
    */
-  async fetchMatches(slug, { format = 'ALL', maxAgeMs = 6 * 3600e3 } = {}) {
-    const key = `matches_${slug}_${format}`;
+  async fetchMatches(slug, { maxAgeMs = 6 * 3600e3, maxSeries = 12 } = {}) {
+    const key = `matches_${slug}_all`;
     const cached = this.readCache(key, maxAgeMs);
     if (cached) return cached;
 
     const page = await (await this.browser()).newPage({ userAgent: UA });
+    const collected = new Map();
+
     try {
       await page.goto(`https://crex.com/player/${slug}/matches`, {
         waitUntil: 'networkidle',
@@ -156,35 +166,65 @@ export class CrexSource extends Source {
       });
       await page.waitForTimeout(2200);
 
-      if (format !== 'ALL') {
-        const tab = page.locator(`text="${format}"`).first();
-        if (await tab.count()) {
-          await tab.click().catch(() => {});
+      // Read every card's label up front. Clicking one re-renders the list, which
+      // detaches the remaining handles — so labels must be captured before the
+      // first click, not lazily as each card is visited.
+      const labels = await page.$$eval('.sCard', (cards) =>
+        cards.map((c) => (c.textContent || '').replace(/\s+/g, ' ').trim())
+      );
+      const cardCount = Math.min(labels.length, maxSeries);
+
+      for (let i = 0; i < cardCount; i++) {
+        const series = parseSeriesCard(labels[i]);
+
+        // Some cards re-render the table in place; others navigate to the series
+        // page and abandon the player context. Returning to the player page before
+        // each click makes the two behave the same, at the cost of a reload.
+        if (i > 0) {
+          try {
+            await page.goto(`https://crex.com/player/${slug}/matches`, {
+              waitUntil: 'domcontentloaded',
+              timeout: 40000,
+            });
+            await page.waitForTimeout(1600);
+          } catch {
+            break;
+          }
+        }
+
+        try {
+          await page.locator('.sCard').nth(i).click({ timeout: 8000 });
           await page.waitForTimeout(1800);
+        } catch {
+          continue;
+        }
+
+        // A click that left the player page cannot yield player innings.
+        if (!page.url().includes(`/player/${slug}`)) continue;
+
+        for (const view of ['Batting', 'Bowling']) {
+          const tab = page.locator(`text="${view}"`).first();
+          if (await tab.count()) {
+            await tab.click({ timeout: 6000 }).catch(() => {});
+            await page.waitForTimeout(1400);
+          }
+          for (const r of await readTable(page)) {
+            const row = parseMatchRow({ ...r, series });
+            if (!row) continue;
+            const k = `${row.fixture}|${row.date}`;
+            // Merge the batting and bowling views of the same innings.
+            collected.set(k, { ...(collected.get(k) ?? {}), ...row });
+          }
         }
       }
 
-      const rows = await page.evaluate(() => {
-        const out = [];
-        for (const tr of document.querySelectorAll('tr.tableClr')) {
-          const cells = [...tr.querySelectorAll('td')].map((td) =>
-            td.textContent.replace(/\s+/g, ' ').trim()
-          );
-          if (cells.length < 3) continue;
-          const [match, date, score] = cells;
-          if (!match || !/\(\d+\)|\/|\d/.test(score ?? '')) continue;
-          out.push({ match, date, score });
-        }
-        return out;
-      });
-
-      const parsed = rows.map((r) => parseMatchRow(r)).filter(Boolean);
+      const parsed = [...collected.values()];
       this.writeCache(key, parsed);
       await page.close();
       return parsed;
-    } catch (err) {
+    } catch {
       await page.close().catch(() => {});
-      return [];
+      return [...collected.values()];
     }
   }
 
@@ -194,13 +234,43 @@ export class CrexSource extends Source {
   }
 }
 
+/** Read the innings table as it currently stands. */
+async function readTable(page) {
+  return page.evaluate(() => {
+    const out = [];
+    for (const tr of document.querySelectorAll('tr.tableClr')) {
+      const cells = [...tr.querySelectorAll('td')].map((td) =>
+        td.textContent.replace(/\s+/g, ' ').trim()
+      );
+      if (cells.length < 3) continue;
+      const [match, date, score] = cells;
+      if (!match || !score) continue;
+      out.push({ match, date, score });
+    }
+    return out;
+  });
+}
+
 /**
- * Parse one match row.
- *
- * `match` looks like "69th T20 vs RR" or "1st ODI vs AUS"; `score` is a batting figure
- * "34 (15)" / "34* (15)" or a bowling figure "2/31".
+ * A tournament card reads "IPL 2026Mar 28 - May 31Played for RR".
+ * The competition name and the side the player turned out for both matter: the
+ * latter is how a franchise is attached to an innings.
  */
-export function parseMatchRow({ match, date, score }) {
+export function parseSeriesCard(label) {
+  const name = label.match(/^(.+?)(?=[A-Z][a-z]{2}\s\d)/)?.[1]?.trim() ?? label.slice(0, 40).trim();
+  const played = label.match(/Played for\s+([A-Z]{2,4})/)?.[1] ?? null;
+  const span = label.match(/([A-Z][a-z]{2}\s\d{1,2})\s*-\s*([A-Z][a-z]{2}\s\d{1,2})/);
+  return { name, playedFor: played, from: span?.[1] ?? null, to: span?.[2] ?? null };
+}
+
+/**
+ * Parse one innings row.
+ *
+ * `match` looks like "69th T20 vs RR", "1st ODI vs AUS" or "3rd Test, 1st Inn".
+ * `score` is a batting figure "34 (15)" / "34* (15)", or a bowling figure "2-23".
+ * The bowling view uses a hyphen, not the slash used elsewhere on the site.
+ */
+export function parseMatchRow({ match, date, score, series }) {
   if (!match || !score) return null;
 
   const vs = match.match(/\bvs\s+(.+)$/i);
@@ -211,6 +281,8 @@ export function parseMatchRow({ match, date, score }) {
     opponent: vs?.[1]?.trim() ?? null,
     format: normaliseFormat(fmt?.[1]),
     date: date ?? null,
+    competition: series?.name ?? null,
+    team: series?.playedFor ?? null,
     source: 'crex',
   };
 
@@ -220,11 +292,14 @@ export function parseMatchRow({ match, date, score }) {
     return row;
   }
 
-  const bowl = score.match(/^(\d+)\/(\d+)$/);
+  // "2-23" (bowling view) and "2/23" both occur.
+  const bowl = score.match(/^(\d+)\s*[-/]\s*(\d+)$/);
   if (bowl) {
     row.bowling = { wickets: +bowl[1], runs: +bowl[2] };
     return row;
   }
+
+  if (/^(dnb|did not bat|-)$/i.test(score)) return row;
 
   row.note = score;
   return row;

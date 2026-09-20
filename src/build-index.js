@@ -17,11 +17,13 @@ import { CricsheetSource, COMPETITIONS } from './sources/cricsheet.js';
 import { PlayerRegistry } from './core/registry.js';
 import { loadSquadFile, resolveSquads, classifySquad } from './core/squads.js';
 import { displayName, stripDisambiguator } from './core/display-name.js';
+import { mergePerformances, mergeStats } from './core/merge.js';
 import { existsSync, readFileSync } from 'node:fs';
 
 const CREX_PATH = new URL('../data/crex-players.json', import.meta.url).pathname;
 const crexPins = existsSync(CREX_PATH) ? JSON.parse(readFileSync(CREX_PATH, 'utf8')).pins ?? {} : {};
 
+const CREX_PERF_PATH = new URL('../data/crex-performances.json', import.meta.url).pathname;
 const CHANGES_PATH = new URL('../data/squad-changes-2026.json', import.meta.url).pathname;
 const squadChanges = existsSync(CHANGES_PATH) ? JSON.parse(readFileSync(CHANGES_PATH, 'utf8')) : { changes: [] };
 
@@ -83,10 +85,16 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
     const listedTeam = t.inSquad ? t.teams?.[0] ?? null : null;
     const played = t.id ? iplTeamOf.get(t.id) ?? null : null;
     const reg = t.id ? registry.get(t.id) : null;
+    // A replaced player is by definition absent from the current squad file, so he
+    // has no `listedAs`. Match on every name we hold for him — including the CREX
+    // common name, which is the spelling reporting uses ("Khaleel Ahmed", not
+    // "KK Ahmed") and therefore the one the changes file is keyed by.
+    const crexName = t.id ? crexPins[t.id]?.displayName : null;
     const change =
-      changesByName.get((t.listedAs ?? '').toLowerCase()) ??
-      changesByName.get((reg?.unique_name ?? '').toLowerCase()) ??
-      null;
+      [t.listedAs, reg?.unique_name, crexName, t.name]
+        .filter(Boolean)
+        .map((n) => changesByName.get(String(n).toLowerCase()))
+        .find(Boolean) ?? null;
 
     const { status, reason, team } = classifySquad({
       id: t.id,
@@ -107,7 +115,26 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
     from,
     slugs: slugs ?? Object.keys(COMPETITIONS),
   });
-  const performances = allPerfs.filter((p) => trackedIds.has(p.playerId));
+  const cricsheetRows = allPerfs.filter((p) => trackedIds.has(p.playerId));
+
+  // CREX leads on recency and on tournaments Cricsheet does not carry; Cricsheet
+  // backs it with ball-by-ball figures. See src/core/merge.js for the precedence.
+  const crexRows = [];
+  if (existsSync(CREX_PERF_PATH)) {
+    const raw = JSON.parse(readFileSync(CREX_PERF_PATH, 'utf8')).byPlayer ?? {};
+    for (const [playerId, rows] of Object.entries(raw)) {
+      if (!trackedIds.has(playerId)) continue;
+      for (const r of rows) {
+        // Only rows whose date resolved to a real day are usable.
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date ?? '')) continue;
+        if (r.date < from) continue;
+        crexRows.push({ ...r, playerId });
+      }
+    }
+  }
+
+  const performances = mergePerformances({ crexRows, cricsheetRows });
+  const merge = mergeStats(performances);
 
   /** @type {Map<string, any>} */
   const players = new Map();
@@ -196,12 +223,14 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
       latestMatch: performances[0]?.date ?? null,
       competitions: [...new Set(performances.map((p) => p.competition))].sort(),
       quarantined: quarantined.length,
+      sources: merge,
       squadNamesUnresolved: unresolved.length,
       benched: playerList.filter((p) => !p.playedIPL).length,
     })
   );
 
   return {
+    merge,
     players: playerList.length,
     performances: performances.length,
     quarantined,
