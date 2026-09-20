@@ -679,7 +679,16 @@
   .card:hover { transform: translateY(-3px); box-shadow: var(--sh-2); border-color: rgba(var(--team-wash), .45); }
   .card:focus-visible { outline: 2px solid var(--team); outline-offset: 2px; }
   .card h3 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
-  .card .cm { margin-top: 4px; font-size: 12.5px; color: var(--ink-3); }
+  .card .cm {
+    margin-top: 5px;
+    font-size: 12.5px;
+    color: var(--ink-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .card .cm b { color: var(--team); font-weight: 600; }
+  .card .cm.dim { font-style: italic; }
   .card .cfg { display: flex; gap: 26px; margin-top: 18px; }
   .card .cfg b {
     display: block;
@@ -775,7 +784,6 @@
       <div class="nav" role="tablist">
         <button id="navToday" role="tab" aria-selected="true">Today</button>
         <button id="navAll" role="tab" aria-selected="false">All players</button>
-        <button id="navClub" role="tab" aria-selected="false" hidden>Club</button>
       </div>
       <div class="segs" role="group" aria-label="Format">
         <button data-f="" aria-pressed="true">ALL</button>
@@ -888,7 +896,7 @@ $('clubs').addEventListener('click', (e) => {
   S.player = null;
   S.day = null;
   // Stay on whichever view the reader was using; it simply re-scopes.
-  if (S.view === 'player') S.view = S.club ? 'club' : 'today';
+  if (S.view === 'player') S.view = 'today';
   drawRail(); draw(); shut();
 });
 
@@ -900,14 +908,9 @@ function draw() {
   $('navToday').setAttribute('aria-selected', String(S.view === 'today'));
   $('navAll').setAttribute('aria-selected', String(S.view === 'all'));
   $('navAll').textContent = S.club ? 'Squad' : 'All players';
-  const nc = $('navClub');
-  nc.hidden = !S.club;
-  nc.setAttribute('aria-selected', String(S.view === 'club'));
-  nc.textContent = S.club ? (ABBR[S.club] ?? 'Club') : 'Club';
 
   if (S.view === 'today') drawToday();
   else if (S.view === 'player') drawPlayer();
-  else if (S.view === 'club') drawClub();
   else drawAll();
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
@@ -1162,16 +1165,45 @@ function drawClub() {
   wire();
 }
 
+/**
+ * A squad card reports the player's most recent assignment, not his season total.
+ * "392 runs in CPL 2026" says where a player actually is and how he is going;
+ * a season aggregate across six competitions says much less.
+ */
+function lastSeries(p) {
+  const rows = (byP.get(p.id) ?? []).filter(okFmt);
+  if (!rows.length) return null;
+  const name = rows[0].competition;
+  const inIt = rows.filter((r) => r.competition === name);
+  return {
+    name,
+    when: rows[0].date,
+    innings: inIt.length,
+    runs: inIt.reduce((n, r) => n + (r.batting?.runs ?? 0), 0),
+    wickets: inIt.reduce((n, r) => n + (r.bowling?.wickets ?? 0), 0),
+    balls: inIt.reduce((n, r) => n + (r.batting?.balls ?? 0), 0),
+  };
+}
+
 function card(p) {
   const c = club1(p);
+  const s = lastSeries(p);
+
   return `<button class="card" data-team="${esc(c)}" data-id="${esc(p.id ?? '')}">
     <h3>${esc(p.name)}</h3>
-    <div class="cm">${(p.formats ?? []).join(' · ') || 'Yet to play'}</div>
-    <div class="cfg">
-      <div class="${p.runs ? '' : 'zero'}"><b>${p.runs}</b><span class="eyebrow">Runs</span></div>
-      <div class="${p.wickets ? '' : 'zero'}"><b>${p.wickets}</b><span class="eyebrow">Wkts</span></div>
-      <div class="${p.innings ? '' : 'zero'}"><b>${p.innings}</b><span class="eyebrow">Inns</span></div>
-    </div>
+    ${s
+      ? `<div class="cm"><b>${esc(comp(s.name))}</b> · ${dShort(s.when)}</div>
+         <div class="cfg">
+           <div class="${s.runs ? '' : 'zero'}"><b>${s.runs}</b><span class="eyebrow">Runs</span></div>
+           <div class="${s.wickets ? '' : 'zero'}"><b>${s.wickets}</b><span class="eyebrow">Wkts</span></div>
+           <div><b>${s.innings}</b><span class="eyebrow">${s.innings === 1 ? 'Inns' : 'Inns'}</span></div>
+         </div>`
+      : `<div class="cm dim">Yet to play this season</div>
+         <div class="cfg">
+           <div class="zero"><b>—</b><span class="eyebrow">Runs</span></div>
+           <div class="zero"><b>—</b><span class="eyebrow">Wkts</span></div>
+           <div class="zero"><b>—</b><span class="eyebrow">Inns</span></div>
+         </div>`}
   </button>`;
 }
 
@@ -1179,7 +1211,8 @@ function card(p) {
 function drawAll() {
   let list = squadInScope().slice();
   if (S.fmt) list = list.filter((p) => (p.formats ?? []).includes(S.fmt));
-  list.sort((a, b) => b.runs - a.runs || (b.lastPlayed ?? '').localeCompare(a.lastPlayed ?? ''));
+  // Cards report the latest assignment, so the most recently active player leads.
+  list.sort((a, b) => (b.lastPlayed ?? '').localeCompare(a.lastPlayed ?? '') || b.runs - a.runs);
 
   $('stage').innerHTML = `
     <div class="sect"><h2>${S.club ? esc(S.club) : 'All players'}</h2><p>${list.length} player${list.length === 1 ? '' : 's'}${S.club ? '' : ' across ten franchises'}${S.fmt ? ` · ${S.fmt}` : ''}</p></div>
@@ -1205,7 +1238,6 @@ function shut() {
 
 $('navToday').onclick = () => { S.view = 'today'; draw(); };
 $('navAll').onclick = () => { S.view = 'all'; draw(); };
-$('navClub').onclick = () => { if (S.club) { S.view = 'club'; draw(); } };
 
 document.querySelectorAll('.segs button').forEach((b) => {
   b.onclick = () => {
