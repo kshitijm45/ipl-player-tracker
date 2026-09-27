@@ -173,6 +173,7 @@ export class CrexSource extends Source {
         cards.map((c) => (c.textContent || '').replace(/\s+/g, ' ').trim())
       );
       const cardCount = Math.min(labels.length, maxSeries);
+      const deferred = [];
 
       for (let i = 0; i < cardCount; i++) {
         const series = parseSeriesCard(labels[i]);
@@ -183,10 +184,10 @@ export class CrexSource extends Source {
         if (i > 0) {
           try {
             await page.goto(`https://crex.com/player/${slug}/matches`, {
-              waitUntil: 'domcontentloaded',
+              waitUntil: 'networkidle',
               timeout: 40000,
             });
-            await page.waitForTimeout(1600);
+            await page.waitForTimeout(2000);
           } catch {
             break;
           }
@@ -194,13 +195,26 @@ export class CrexSource extends Source {
 
         try {
           await page.locator('.sCard').nth(i).click({ timeout: 8000 });
-          await page.waitForTimeout(1800);
+          // A navigating card needs longer than an in-place re-render before the
+          // URL settles; checking too early reads the player page and the series
+          // is silently dropped.
+          await page.waitForTimeout(2600);
         } catch {
           continue;
         }
 
-        // A click that left the player page cannot yield player innings.
-        if (!page.url().includes(`/player/${slug}`)) continue;
+        // Most cards re-render the innings table in place. A few navigate to the
+        // series page instead, and for those the player's innings are only
+        // reachable through that series' scorecards — skipping them loses whole
+        // tours (Buttler's England series, including a 131, went missing this way).
+        // Those are noted and read after this loop: following a navigation here
+        // leaves the card list re-rendered, so every later index would point at
+        // the wrong tournament.
+        if (!page.url().includes(`/player/${slug}`)) {
+          const seriesUrl = page.url();
+          if (/\/series\//.test(seriesUrl)) deferred.push({ seriesUrl, series });
+          continue;
+        }
 
         for (const view of ['Batting', 'Bowling']) {
           const tab = page.locator(`text="${view}"`).first();
@@ -218,6 +232,21 @@ export class CrexSource extends Source {
         }
       }
 
+      // Second pass: the series whose cards navigated away.
+      for (const { seriesUrl, series } of deferred) {
+        const side = await (await this.browser()).newPage({ userAgent: UA });
+        try {
+          for (const row of await readSeriesInnings(side, seriesUrl, slug, series)) {
+            const k = `${row.fixture}|${row.date}`;
+            collected.set(k, { ...(collected.get(k) ?? {}), ...row });
+          }
+        } catch {
+          // a failed series must not lose the rest of the player's record
+        } finally {
+          await side.close().catch(() => {});
+        }
+      }
+
       const parsed = [...collected.values()];
       this.writeCache(key, parsed);
       await page.close();
@@ -232,6 +261,134 @@ export class CrexSource extends Source {
   async pause() {
     await new Promise((r) => setTimeout(r, this.delayMs));
   }
+}
+
+/**
+ * A player's innings in a series whose card navigates rather than expanding.
+ *
+ * The series page lists its matches; each scorecard carries every player's figures,
+ * so the player's own rows are picked out by his slug. Cells are read as direct TD
+ * children only — querying `td, div` picks up nested wrappers and returns duplicated
+ * names and partnership scores ("70-2") rather than innings figures.
+ */
+async function readSeriesInnings(page, seriesUrl, slug, series, { maxMatches = 14 } = {}) {
+  const out = [];
+  let links = [];
+  try {
+    // The URL handed in is already the series' matches page, so appending
+    // "/matches" again yields ".../matches/matches", which 404s silently.
+    const base = seriesUrl.replace(/\/$/, '').replace(/\/matches$/, '');
+    await page.goto(`${base}/matches`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    });
+    await page.waitForTimeout(1600);
+    links = await page.$$eval('a[href*="cricket-live-score"]', (as) =>
+      [...new Set(as.map((a) => a.getAttribute('href')).filter(Boolean))]
+    );
+  } catch {
+    return out;
+  }
+
+  for (const link of links.slice(0, maxMatches)) {
+    try {
+      await page.goto(`https://crex.com${link.replace(/\/$/, '')}/match-scorecard`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 25000,
+      });
+      await page.waitForTimeout(1300);
+
+      const hit = await page.evaluate((want) => {
+        const rows = [];
+        for (const tr of document.querySelectorAll('tr')) {
+          const a = tr.querySelector(`a[href^="/player/${want}"]`);
+          if (!a) continue;
+          const cells = [...tr.children]
+            .filter((c) => c.tagName === 'TD')
+            .map((c) => c.textContent.replace(/\s+/g, ' ').trim());
+          if (cells.length >= 4) rows.push(cells);
+        }
+        // The page carries the match date and the sides in plain text.
+        const text = document.body.innerText;
+        return {
+          rows,
+          date: text.match(/(\d{1,2}\s+[A-Z][a-z]{2}\s+\d{4})/)?.[1] ?? null,
+          title: document.title,
+        };
+      }, slug);
+
+      if (!hit.rows.length) continue;
+
+      // The title reads "England won by 4 wickets, England vs India 2nd-T20 Live
+      // match Score" — the result comes first, so the fixture is the later clause.
+      const fixture =
+        hit.title.match(/([A-Za-z ]+ vs [A-Za-z ]+ \d+(?:st|nd|rd|th)-\w+)/)?.[1]?.trim() ||
+        hit.title.split(/[,|]/).slice(1).join(',').trim().slice(0, 60) ||
+        'match';
+      const stage = hit.title.match(/(\d+(?:st|nd|rd|th))-(T20|ODI|Test)/i);
+      // Scorecards carry no date, so the series window plus the match number is
+      // the only ordering available; the merge resolves it against the season.
+      const date = normaliseSeriesDate(hit.date) ?? seriesDateFor(series, stage?.[1]);
+
+      for (const cells of hit.rows) {
+        const parsed = parseScorecardCells(cells);
+        if (!parsed) continue;
+        out.push({
+          fixture: stage ? `${stage[1]} ${stage[2]} — ${fixture}` : fixture,
+          date,
+          format: stage ? normaliseFormat(stage[2]) : 'Unknown',
+          competition: series?.name ?? null,
+          team: series?.playedFor ?? null,
+          opponent: null,
+          ...parsed,
+          source: 'crex',
+        });
+      }
+    } catch {
+      // one unreadable scorecard should not end the series
+    }
+  }
+  return out;
+}
+
+/**
+ * Spread a series' matches across its own window when the scorecards carry no
+ * date: "Jul 1 - Jul 19" with a 2nd match puts it a couple of days in. Approximate
+ * by design, and only ever used for rows that would otherwise have no date at all.
+ */
+function seriesDateFor(series, ordinal) {
+  if (!series?.from) return null;
+  const n = ordinal ? parseInt(ordinal, 10) : 1;
+  const m = String(series.from).match(/^([A-Z][a-z]{2})\s+(\d{1,2})$/);
+  if (!m) return null;
+  const day = +m[2] + (Number.isFinite(n) ? (n - 1) * 2 : 0);
+  return `${day} ${m[1]}`;
+}
+
+/** "11 Jul 2026" -> "11 Jul", matching the shape the player table returns. */
+function normaliseSeriesDate(s) {
+  if (!s) return null;
+  const m = String(s).match(/^(\d{1,2})\s+([A-Z][a-z]{2})/);
+  return m ? `${+m[1]} ${m[2]}` : null;
+}
+
+/**
+ * Batting: [name + how out, runs, balls, 4s, 6s, SR]
+ * Bowling: [name, overs, maidens, runs, wickets, econ]
+ * The second cell tells them apart: an overs figure carries a decimal.
+ */
+export function parseScorecardCells(cells) {
+  if (!Array.isArray(cells) || cells.length < 5) return null;
+  const [who, a, b, c, d] = cells.map((x) => String(x ?? '').trim());
+
+  if (/^\d+\.\d$/.test(a)) {
+    if (!/^\d+$/.test(c) || !/^\d+$/.test(d)) return null;
+    const [o, rem] = a.split('.');
+    return { bowling: { overs: a, balls: +o * 6 + +rem, runs: +c, wickets: +d } };
+  }
+
+  if (!/^\d+$/.test(a) || !/^\d+$/.test(b)) return null;
+  return { batting: { runs: +a, balls: +b, out: !/NOT OUT/i.test(who) } };
 }
 
 /** Read the innings table as it currently stands. */
