@@ -111,7 +111,9 @@ export function mergePerformances({ crexRows = [], cricsheetRows = [], today, fr
       batting: existing.batting ?? c.batting,
       bowling: existing.bowling ?? c.bowling,
       competition: preferName(c.competition, existing.competition),
-      sources: [...existing.sources, 'crex'],
+      // A source may contribute the same innings twice (batting and bowling are
+      // separate views of one row), so keep the list distinct.
+      sources: [...new Set([...existing.sources, 'crex'])],
     });
   }
 
