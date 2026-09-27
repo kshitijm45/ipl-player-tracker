@@ -68,8 +68,15 @@ export function seasonYearFor(competition, month, fallbackYear = 2026) {
 export const POST_IPL = '2026-06-01';
 
 export async function ingest({ concurrency = 4, limit = Infinity, season = 2026, since = POST_IPL } = {}) {
-  const pins = JSON.parse(readFileSync(CREX_PATH, 'utf8')).pins ?? {};
-  const entries = Object.entries(pins).slice(0, limit);
+  const file = JSON.parse(readFileSync(CREX_PATH, 'utf8'));
+  const pins = file.pins ?? {};
+  // Players with no Cricsheet id are keyed by name; their rows are stored under the
+  // slug instead, which is the only identity they have.
+  const slugPins = file.slugPins ?? {};
+  const entries = [
+    ...Object.entries(pins),
+    ...Object.entries(slugPins).map(([, pin]) => [pin.slug, pin]),
+  ].slice(0, limit);
 
   const existing = existsSync(OUT_PATH)
     ? JSON.parse(readFileSync(OUT_PATH, 'utf8'))

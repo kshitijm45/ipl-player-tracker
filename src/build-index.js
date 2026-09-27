@@ -21,7 +21,12 @@ import { mergePerformances, mergeStats } from './core/merge.js';
 import { existsSync, readFileSync } from 'node:fs';
 
 const CREX_PATH = new URL('../data/crex-players.json', import.meta.url).pathname;
-const crexPins = existsSync(CREX_PATH) ? JSON.parse(readFileSync(CREX_PATH, 'utf8')).pins ?? {} : {};
+const crexFile = existsSync(CREX_PATH) ? JSON.parse(readFileSync(CREX_PATH, 'utf8')) : {};
+const crexPins = crexFile.pins ?? {};
+// Players with no Cricsheet register entry are keyed by name instead, with the
+// CREX slug standing in as their identity. Without this they can never be tracked,
+// because the pinning step has no id to hang them on.
+const crexSlugPins = crexFile.slugPins ?? {};
 
 const CREX_PERF_PATH = new URL('../data/crex-performances.json', import.meta.url).pathname;
 const CHANGES_PATH = new URL('../data/squad-changes-2026.json', import.meta.url).pathname;
@@ -155,8 +160,12 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
   const crexRows = [];
   if (existsSync(CREX_PERF_PATH)) {
     const raw = JSON.parse(readFileSync(CREX_PERF_PATH, 'utf8')).byPlayer ?? {};
+    // Rows for slug-pinned players arrive keyed by slug rather than by id.
+    const slugOwner = new Map();
+    for (const [name, pin] of Object.entries(crexSlugPins)) slugOwner.set(pin.slug, name);
+
     for (const [playerId, rows] of Object.entries(raw)) {
-      if (!trackedIds.has(playerId)) continue;
+      if (!trackedIds.has(playerId) && !slugOwner.has(playerId)) continue;
       for (const r of rows) {
         // Only rows whose date resolved to a real day are usable.
         if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date ?? '')) continue;
@@ -176,7 +185,7 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
   for (const t of tracked.values()) {
     const reg = t.id ? registry.get(t.id) : null;
     const registerName = reg?.unique_name ?? t.name;
-    const crex = t.id ? crexPins[t.id] : null;
+    const crex = (t.id ? crexPins[t.id] : null) ?? crexSlugPins[t.name] ?? null;
 
     players.set(t.id ?? `unmapped:${t.name}`, {
       id: t.id ?? null,

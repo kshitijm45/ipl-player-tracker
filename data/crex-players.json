@@ -2589,5 +2589,97 @@
       "code": "NVC",
       "displayName": "S Singh"
     }
+  },
+  "slugPins": {
+    "Saurabh Dubey": {
+      "slug": "saurabh-dubey-62M",
+      "code": "62M",
+      "displayName": "Saurabh Dubey"
+    },
+    "Mukul Choudhary": {
+      "slug": "mukul-choudhary-B82",
+      "code": "B82",
+      "displayName": "Mukul Choudhary"
+    },
+    "Vicky Ostwal": {
+      "slug": "vicky-ostwal-7JR",
+      "code": "7JR",
+      "displayName": "Vicky Ostwal"
+    },
+    "Macneil Noronha": {
+      "slug": "macneil-noronha-95O",
+      "code": "95O",
+      "displayName": "Macneil Noronha"
+    },
+    "Pyla Avinash": {
+      "slug": "pyla-avinash-8Z0",
+      "code": "8Z0",
+      "displayName": "Pyla Avinash"
+    },
+    "Emanjot Singh Chahal": {
+      "slug": "emanjot-singh-chahal-BZ4",
+      "code": "BZ4",
+      "displayName": "Emanjot Singh Chahal"
+    },
+    "Kanishk Chouhan": {
+      "slug": "kanishk-chouhan-KBV",
+      "code": "KBV",
+      "displayName": "Kanishk Chouhan"
+    },
+    "Satvik Deswal": {
+      "slug": "satvik-deswal-KI0",
+      "code": "KI0",
+      "displayName": "Satvik Deswal"
+    },
+    "Daksh Kamra": {
+      "slug": "daksh-kamra-MHV",
+      "code": "MHV",
+      "displayName": "Daksh Kamra"
+    },
+    "Krains Fuletra": {
+      "slug": "krains-fuletra-GJY",
+      "code": "GJY",
+      "displayName": "Krains Fuletra"
+    },
+    "Ruchit Ahir": {
+      "slug": "ruchit-ahir-C6A",
+      "code": "C6A",
+      "displayName": "Ruchit Ahir"
+    },
+    "Aman Rao Perala": {
+      "slug": "aman-rao-G7C",
+      "code": "G7C",
+      "displayName": "Aman Rao Perala"
+    },
+    "Onkar Tukaram Tarmale": {
+      "slug": "onkar-tarmale-JWY",
+      "code": "JWY",
+      "displayName": "Onkar Tarmale"
+    },
+    "Prashant Solanki": {
+      "slug": "prashant-solanki-63G",
+      "code": "63G",
+      "displayName": "Prashant Solanki"
+    },
+    "Mayank Rawat": {
+      "slug": "mayank-rawat-7AS",
+      "code": "7AS",
+      "displayName": "Mayank Rawat"
+    },
+    "Vishal Nishad": {
+      "slug": "vishal-nishad-EYQ",
+      "code": "EYQ",
+      "displayName": "Vishal Nishad"
+    },
+    "Harnoor Pannu": {
+      "slug": "harnoor-singh-7JB",
+      "code": "7JB",
+      "displayName": "Harnoor Pannu"
+    },
+    "Smaran-R": {
+      "slug": "smaran-ravichandran-96H",
+      "code": "96H",
+      "displayName": "Smaran-R"
+    }
   }
 }
