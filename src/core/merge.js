@@ -88,7 +88,60 @@ export function mergePerformances({ crexRows = [], cricsheetRows = [], today, fr
     }
   }
 
-  const rows = [...merged.values()].filter((r) => !from || !r.date || r.date >= from);
+  // A card click that has not re-rendered yet leaves the previous tournament's
+  // innings on screen, and the walk stamps the new card's label onto them. Where
+  // the fixture names an opponent the competition does not mention at all, the
+  // label is provably not this match's — "IND vs JPN" carrying "1st T20 vs AFG",
+  // or a Duleep Trophy semi-final filed under a Japan tour.
+  const contradicts = (r) => {
+    const comp = r.competition ?? '';
+    const opponent = (r.fixture ?? '').match(/\bvs\s+([A-Za-z-]{2,4})$/i)?.[1];
+    if (!opponent) return false;
+    const codes = comp.match(/\b[A-Z]{2,4}(?:-[AB])?\b/g) ?? [];
+    if (codes.length < 2) return false;
+    return !codes.some((c) => c.toUpperCase() === opponent.toUpperCase());
+  };
+
+  // A multi-innings fixture ("2nd-Semi-Final Test, 1st Inn") names no opponent, so
+  // the check above cannot see it is mislabelled. Those are resolved by date: if
+  // another competition ran the same fixture on the same day and far more players
+  // agree on it, the row belongs there. This is how a Duleep Trophy semi-final
+  // filed under a Japan tour finds its way home.
+  const byDayFixture = new Map();
+  for (const r of merged.values()) {
+    if (!r.date || !r.fixture || !r.competition) continue;
+    const k = `${r.date}|${r.fixture}`;
+    if (!byDayFixture.has(k)) byDayFixture.set(k, new Map());
+    const t = byDayFixture.get(k);
+    t.set(r.competition, (t.get(r.competition) ?? 0) + 1);
+  }
+  const dayTotals = new Map();
+  for (const r of merged.values()) {
+    if (!r.date || !r.competition) continue;
+    const k = `${r.date}|${r.competition}`;
+    dayTotals.set(k, (dayTotals.get(k) ?? 0) + 1);
+  }
+  for (const r of merged.values()) {
+    if (!r.date || !r.fixture) continue;
+    // Only fixtures with no opponent clause; the rest are handled above.
+    if (/\bvs\b/i.test(r.fixture)) continue;
+    const mine = dayTotals.get(`${r.date}|${r.competition}`) ?? 0;
+    if (mine > 2) continue; // well attested, leave it alone
+
+    let best = null;
+    for (const [comp, count] of byDayFixture.get(`${r.date}|${r.fixture}`) ?? []) {
+      if (comp === r.competition) continue;
+      if (!best || count > best[1]) best = [comp, count];
+    }
+    if (best && best[1] > mine) {
+      r.competition = best[0];
+      r.competitionCorrected = true;
+    }
+  }
+
+  const rows = [...merged.values()]
+    .filter((r) => !contradicts(r))
+    .filter((r) => !from || !r.date || r.date >= from);
   return rows.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
 }
 

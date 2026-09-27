@@ -174,6 +174,11 @@ export class CrexSource extends Source {
       );
       const cardCount = Math.min(labels.length, maxSeries);
       const deferred = [];
+      // Every card's window, so a row can be attributed by its date. Reading the
+      // format tabs surfaces innings from tournaments other than the selected card,
+      // and tagging those with the active card's name is how a Duleep Trophy
+      // semi-final ended up filed under a one-day tour of Japan.
+      const windows = labels.slice(0, cardCount).map(parseSeriesCard).filter((w) => w?.name);
 
       for (let i = 0; i < cardCount; i++) {
         const series = parseSeriesCard(labels[i]);
@@ -221,18 +226,34 @@ export class CrexSource extends Source {
           continue;
         }
 
-        for (const view of ['Batting', 'Bowling']) {
-          const tab = page.locator(`text="${view}"`).first();
-          if (await tab.count()) {
-            await tab.click({ timeout: 6000 }).catch(() => {});
-            await page.waitForTimeout(1400);
+        // The table is split two ways at once: Batting/Bowling, and a format tab
+        // (ALL / T20 / ODI / Test / T10 / 100B). The default view shows only one
+        // format, so a player's Test innings — three Duleep Trophy knocks, in the
+        // case that exposed this — are invisible unless the Test tab is opened.
+        for (const format of ['ALL', 'T20', 'ODI', 'Test', 'T10', '100B']) {
+          // Target the tab itself (div.statsType). A bare text match hits the
+          // series-card title "T20" first and silently never switches format.
+          const fmtTab = page.locator('.statsType', { hasText: new RegExp(`^${format}$`) }).first();
+          if (await fmtTab.count()) {
+            await fmtTab.click({ timeout: 5000 }).catch(() => {});
+            await page.waitForTimeout(1300);
+          } else if (format !== 'ALL') {
+            continue;
           }
-          for (const r of await readTable(page)) {
-            const row = parseMatchRow({ ...r, series });
-            if (!row) continue;
-            const k = `${row.fixture}|${row.date}`;
-            // Merge the batting and bowling views of the same innings.
-            collected.set(k, { ...(collected.get(k) ?? {}), ...row });
+
+          for (const view of ['Batting', 'Bowling']) {
+            const tab = page.locator(`text="${view}"`).first();
+            if (await tab.count()) {
+              await tab.click({ timeout: 5000 }).catch(() => {});
+              await page.waitForTimeout(1100);
+            }
+            for (const r of await readTable(page)) {
+              const row = parseMatchRow({ ...r, series: seriesForDate(windows, r.date) ?? series });
+              if (!row) continue;
+              const k = `${row.fixture}|${row.date}`;
+              // Merge the batting and bowling views of the same innings.
+              collected.set(k, { ...(collected.get(k) ?? {}), ...row });
+            }
           }
         }
       }
@@ -295,7 +316,9 @@ async function readSeriesInnings(page, seriesUrl, slug, series, { maxMatches = 1
     return out;
   }
 
-  for (const link of links.slice(0, maxMatches)) {
+  const window = links.slice(0, maxMatches);
+  for (let matchIndex = 0; matchIndex < window.length; matchIndex++) {
+    const link = window[matchIndex];
     try {
       await page.goto(`https://crex.com${link.replace(/\/$/, '')}/match-scorecard`, {
         waitUntil: 'domcontentloaded',
@@ -338,15 +361,21 @@ async function readSeriesInnings(page, seriesUrl, slug, series, { maxMatches = 1
         hit.title.split(/[,|]/).slice(1).join(',').trim().slice(0, 60) ||
         'match';
       const stage = hit.title.match(/(\d+(?:st|nd|rd|th))-(T20|ODI|Test)/i);
-      // Only a date CREX actually printed. A scorecard without one yields a row
-      // with no date rather than a guess derived from the series window.
-      const date = normaliseSeriesDate(hit.date);
+      // CREX prints no date on these scorecards and /match-info is forbidden, so a
+      // row would otherwise be dropped for want of one. The series card does carry
+      // the window ("Aug 23 - Sep 10") and matches are listed in order, so the date
+      // is placed within it and flagged as approximate — losing a Duleep Trophy
+      // semi-final entirely is worse than dating it to the right week.
+      const printed = normaliseSeriesDate(hit.date);
+      const date = printed ?? spreadOverWindow(series, matchIndex, window.length);
+      const dateApprox = !printed;
 
       for (const cells of hit.rows) {
         const parsed = parseScorecardCells(cells);
         if (!parsed) continue;
         out.push({
           fixture,
+          dateApprox,
           date,
           format: stage ? normaliseFormat(stage[2]) : 'Unknown',
           competition: series?.name ?? null,
@@ -383,6 +412,62 @@ export function seriesEndedBefore(series, cutoff) {
 
   const end = `${year}-${String(mi + 1).padStart(2, '0')}-${String(+m[2]).padStart(2, '0')}`;
   return end < cutoff;
+}
+
+/**
+ * Place match `i` of `n` inside a series window. Used only when CREX publishes no
+ * date for a scorecard; the row is flagged `dateApprox` so nothing downstream
+ * treats it as exact.
+ */
+function spreadOverWindow(series, i, n) {
+  if (!series?.from || !series?.to || !n) return null;
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const parse = (x) => {
+    const m = String(x).match(/^([A-Z][a-z]{2})\s+(\d{1,2})$/);
+    if (!m) return null;
+    const mi = MON.indexOf(m[1]);
+    return mi < 0 ? null : { mi, d: +m[2] };
+  };
+  const a = parse(series.from);
+  const b = parse(series.to);
+  const year = String(series.name ?? '').match(/(20\d{2})/)?.[1];
+  if (!a || !b || !year) return null;
+
+  const start = Date.UTC(+year, a.mi, a.d);
+  const end = Date.UTC(+year, b.mi, b.d);
+  if (end < start) return null;
+  const at = start + ((end - start) * (n === 1 ? 0 : i / (n - 1)));
+  const d = new Date(at);
+  return `${d.getUTCDate()} ${MON[d.getUTCMonth()]}`;
+}
+
+/**
+ * Which tournament was running on this date? Cards carry a window ("Aug 23 - Sep
+ * 10"), so a row read under one card but belonging to another is attributed by the
+ * date it actually happened.
+ */
+function seriesForDate(windows, dayMonth) {
+  if (!dayMonth) return null;
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const parse = (x) => {
+    const m = String(x ?? '').match(/^(\d{1,2})\s+([A-Z][a-z]{2})$|^([A-Z][a-z]{2})\s+(\d{1,2})$/);
+    if (!m) return null;
+    const day = m[1] ? +m[1] : +m[4];
+    const mon = m[2] ?? m[3];
+    const mi = MON.indexOf(mon);
+    return mi < 0 ? null : mi * 31 + day;
+  };
+  const at = parse(dayMonth);
+  if (at == null) return null;
+
+  const hits = windows.filter((w) => {
+    const a = parse(w.from);
+    const b = parse(w.to);
+    return a != null && b != null && at >= a && at <= b;
+  });
+  // Only when exactly one tournament was running; overlapping windows stay with
+  // the card that produced the row.
+  return hits.length === 1 ? hits[0] : null;
 }
 
 /** "11 Jul 2026" -> "11 Jul", matching the shape the player table returns. */
