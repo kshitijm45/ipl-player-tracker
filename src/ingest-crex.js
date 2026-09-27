@@ -85,6 +85,7 @@ export async function ingest({ concurrency = 4, limit = Infinity, season = 2026,
   const results = { ...existing.byPlayer };
   let done = 0;
   let failed = 0;
+  const failures = [];
 
   // A pool of workers, each with its own page, walking the same queue.
   const queue = [...entries];
@@ -104,7 +105,12 @@ export async function ingest({ concurrency = 4, limit = Infinity, season = 2026,
           // A tournament spanning the cutoff still yields earlier innings; drop them.
           .filter((r) => !since || !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || r.date >= since);
         done++;
-      } catch {
+      } catch (err) {
+        // A swallowed error made a skipped player look like a scraped one: the run
+        // reported "259 players, 0 failed" while thirteen — Boult, Jamieson,
+        // Chameera, Shedge among them — had never been fetched at all. Record
+        // which ones, and retry once before giving up on a player.
+        failures.push({ playerId, slug: pin.slug, error: String(err?.message ?? err).slice(0, 120) });
         failed++;
       }
       if ((done + failed) % 10 === 0) {
@@ -117,10 +123,36 @@ export async function ingest({ concurrency = 4, limit = Infinity, season = 2026,
   await Promise.all(Array.from({ length: concurrency }, (_, i) => worker(i)));
   await source.close();
 
+  // Retry the failures once: most are transient timeouts, and a silent skip is
+  // worse than a slow run.
+  if (failures.length) {
+    console.log(`\n  retrying ${failures.length} failures`);
+    for (const f of failures.splice(0)) {
+      try {
+        const rows = await source.fetchMatches(f.slug, { maxAgeMs: 0, since });
+        results[f.playerId] = rows
+          .map((r) => ({
+            ...r,
+            date: resolveDate(r.date, r.competition, season) ?? r.date,
+            playerId: f.playerId,
+          }))
+          .filter((r) => !since || !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || r.date >= since);
+        done++;
+        failed--;
+      } catch (err) {
+        failures.push({ ...f, error: String(err?.message ?? err).slice(0, 120) });
+      }
+    }
+  }
+
   flush(results);
   const total = Object.values(results).reduce((n, r) => n + r.length, 0);
   console.log(`\n  ${done} players, ${total} innings, ${failed} failed`);
-  return { players: done, innings: total, failed };
+  if (failures.length) {
+    console.log('  still failing:');
+    for (const f of failures) console.log(`    ${f.slug} — ${f.error}`);
+  }
+  return { players: done, innings: total, failed, failures };
 }
 
 function flush(byPlayer) {
