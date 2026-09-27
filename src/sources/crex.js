@@ -166,14 +166,30 @@ export class CrexSource extends Source {
       });
       await page.waitForTimeout(2200);
 
-      // Read every card's label up front. Clicking one re-renders the list, which
-      // detaches the remaining handles — so labels must be captured before the
-      // first click, not lazily as each card is visited.
+      // The Batting and Bowling tabs do not show the same tournaments. A bowler who
+      // only bowled in a competition has no card for it under Batting — Mohsin
+      // Khan's UP T20 2026 is absent there and present under Bowling — so the card
+      // list has to be read again inside each discipline rather than once up front.
+      const deferred = [];
+      const seenCards = new Set();
+
+      for (const discipline of ['Batting', 'Bowling']) {
+        await page.goto(`https://crex.com/player/${slug}/matches`, {
+          waitUntil: 'networkidle',
+          timeout: 45000,
+        });
+        await page.waitForTimeout(2000);
+
+        const dTab = page.locator(`text="${discipline}"`).first();
+        if (await dTab.count()) {
+          await dTab.click({ timeout: 6000 }).catch(() => {});
+          await page.waitForTimeout(1800);
+        }
+
       const labels = await page.$$eval('.sCard', (cards) =>
         cards.map((c) => (c.textContent || '').replace(/\s+/g, ' ').trim())
       );
       const cardCount = Math.min(labels.length, maxSeries);
-      const deferred = [];
       // Every card's window, so a row can be attributed by its date. Reading the
       // format tabs surfaces innings from tournaments other than the selected card,
       // and tagging those with the active card's name is how a Duleep Trophy
@@ -187,6 +203,11 @@ export class CrexSource extends Source {
         // costs a page load, and a re-scrape aimed at recent cricket has no reason
         // to walk the IPL and everything before it again.
         if (since && seriesEndedBefore(series, since)) continue;
+        // The two tabs overlap heavily; a card read once need not be walked again.
+        const cardKey = `${discipline === 'Bowling' ? 'b' : 'a'}|${series?.name ?? labels[i]}`;
+        const sharedKey = series?.name ?? labels[i];
+        if (seenCards.has(sharedKey)) continue;
+        seenCards.add(sharedKey);
 
         // Some cards re-render the table in place; others navigate to the series
         // page and abandon the player context. Returning to the player page before
@@ -197,7 +218,14 @@ export class CrexSource extends Source {
               waitUntil: 'networkidle',
               timeout: 40000,
             });
-            await page.waitForTimeout(2000);
+            await page.waitForTimeout(1800);
+            // Re-select the discipline: a reload drops back to Batting, and the
+            // card indices only mean anything within the tab they came from.
+            const back = page.locator(`text="${discipline}"`).first();
+            if (await back.count()) {
+              await back.click({ timeout: 6000 }).catch(() => {});
+              await page.waitForTimeout(1500);
+            }
           } catch {
             break;
           }
@@ -241,21 +269,15 @@ export class CrexSource extends Source {
             continue;
           }
 
-          for (const view of ['Batting', 'Bowling']) {
-            const tab = page.locator(`text="${view}"`).first();
-            if (await tab.count()) {
-              await tab.click({ timeout: 5000 }).catch(() => {});
-              await page.waitForTimeout(1100);
-            }
-            for (const r of await readTable(page)) {
-              const row = parseMatchRow({ ...r, series: seriesForDate(windows, r.date) ?? series });
-              if (!row) continue;
-              const k = `${row.fixture}|${row.date}`;
-              // Merge the batting and bowling views of the same innings.
-              collected.set(k, { ...(collected.get(k) ?? {}), ...row });
-            }
+          for (const r of await readTable(page)) {
+            const row = parseMatchRow({ ...r, series: seriesForDate(windows, r.date) ?? series });
+            if (!row) continue;
+            const k = `${row.fixture}|${row.date}`;
+            // Batting and bowling arrive as separate rows for one innings; merge them.
+            collected.set(k, { ...(collected.get(k) ?? {}), ...row });
           }
         }
+      }
       }
 
       // Second pass: the series whose cards navigated away.
