@@ -12,6 +12,11 @@
       "code": "5SH",
       "displayName": "Arshad Khan"
     },
+    "23393635": {
+      "slug": "dian-forrester-CEM",
+      "code": "CEM",
+      "displayName": "Dian Forrester"
+    },
     "25228673": {
       "slug": "harsh-dubey-62Y",
       "code": "62Y",
@@ -1171,6 +1176,26 @@
       "slug": "david-payne-3GQ",
       "code": "3GQ",
       "displayName": "DA Payne"
+    },
+    "548516a6": {
+      "slug": "ravi-singh-G35",
+      "code": "G35",
+      "displayName": "Ravi Singh"
+    },
+    "82c10dac": {
+      "slug": "abhinandan-singh-ERN",
+      "code": "ERN",
+      "displayName": "Abhinandan Singh"
+    },
+    "31ee319e": {
+      "slug": "ajay-jadav-mandal-5LM",
+      "code": "5LM",
+      "displayName": "Ajay Mandal"
+    },
+    "452837d1": {
+      "slug": "vihaan-malhotra-BZD",
+      "code": "BZD",
+      "displayName": "Vihaan Malhotra"
     }
   },
   "bySlug": {
