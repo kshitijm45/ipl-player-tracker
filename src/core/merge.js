@@ -1,67 +1,26 @@
 /**
- * Merging CREX and Cricsheet innings.
+ * Assemble the innings CREX gives us.
  *
- * CREX leads: it is fresher (it carried the 19 Sep England–Sri Lanka T20 while
- * Cricsheet stopped at 17 Sep), it covers domestic tournaments no free dataset has
- * (UP T20, MP T20, Mumbai T20, Duleep Trophy, MLC, CPL), and it names players the way
- * fans do. Cricsheet fills in behind it: ball-by-ball precision, full fielding
- * figures, and every player CREX has no slug for.
+ * CREX is the single source, and what it prints is what the site shows. Nothing
+ * here renames a competition, expands a team code, or works out an opponent the
+ * scorecard did not state.
  *
- * The two describe the same innings differently, so a match is keyed on
- * (playerId, date, format) rather than on competition or opponent names, which
- * disagree between sources ("IPL 2026" vs "Indian Premier League", "RR" vs
- * "Rajasthan Royals"). Where both have an innings, CREX's identity fields win and
- * Cricsheet's richer figures are kept.
+ * That rule exists because every transformation tried here was wrong in a way that
+ * was hard to see: "IND vs ENG 2026" was rewritten as "England in India" when India
+ * were the tourists, a fixture with no "vs" clause had an opponent invented for it
+ * from the tournament name, and a team code expanded into a club that was not
+ * playing. Passing the source through unchanged is both simpler and correct.
+ *
+ * Two things are still done, because they concern which rows exist rather than what
+ * they say:
+ *   - a match still in progress is dropped; its figures are partial
+ *   - where the same fixture arrives under different tournament names — a card that
+ *     did not re-render cleanly — the name most players agree on wins
  */
 
 /** Same innings? Same player, same day, same format. */
 function key(r) {
   return `${r.playerId}|${r.date}|${r.format ?? ''}`;
-}
-
-/**
- * Expand a short team code against the full names Cricsheet uses, so a merged row
- * does not show "RR" where the rest of the site says "Rajasthan Royals".
- */
-const CODE_TO_TEAM = {
-  CSK: 'Chennai Super Kings', DC: 'Delhi Capitals', GT: 'Gujarat Titans',
-  KKR: 'Kolkata Knight Riders', LSG: 'Lucknow Super Giants', MI: 'Mumbai Indians',
-  PBKS: 'Punjab Kings', RR: 'Rajasthan Royals', RCB: 'Royal Challengers Bengaluru',
-  SRH: 'Sunrisers Hyderabad',
-};
-
-/** CREX competition labels are abbreviated; prefer Cricsheet's full name when both exist. */
-function preferName(crexName, cricsheetName) {
-  return cricsheetName ?? crexName ?? null;
-}
-
-/** Country codes CREX uses in fixture strings and tournament labels. */
-const NATION = {
-  IND: 'India', AUS: 'Australia', ENG: 'England', SA: 'South Africa', NZ: 'New Zealand',
-  PAK: 'Pakistan', SL: 'Sri Lanka', WI: 'West Indies', BAN: 'Bangladesh', AFG: 'Afghanistan',
-  ZIM: 'Zimbabwe', IRE: 'Ireland', SCO: 'Scotland', NED: 'Netherlands', NAM: 'Namibia',
-  UAE: 'United Arab Emirates', NEP: 'Nepal', OMA: 'Oman', USA: 'United States', CAN: 'Canada',
-};
-
-/**
- * "AUS vs ZIM 2026" is how CREX labels a bilateral series, which reads as a code
- * rather than a fixture once it reaches the page. Expand the countries and turn the
- * label into the tour phrasing the rest of the site uses.
- */
-export function expandCompetition(label) {
-  if (!label) return label;
-  const m = String(label).match(/^([A-Z]{2,4})\s+vs\s+([A-Z]{2,4})\s*(\d{4}(?:-\d{2})?)?$/);
-  if (!m) return label;
-  const [, a, b, year] = m;
-  const A = NATION[a] ?? a;
-  const B = NATION[b] ?? b;
-  return `${B} in ${A}${year ? ` ${year}` : ''}`;
-}
-
-/** Expand a team code, leaving anything already spelled out untouched. */
-export function expandTeam(code) {
-  if (!code) return code;
-  return CODE_TO_TEAM[code] ?? NATION[code] ?? code;
 }
 
 export function mergePerformances({ crexRows = [], cricsheetRows = [], today, from } = {}) {
@@ -78,8 +37,7 @@ export function mergePerformances({ crexRows = [], cricsheetRows = [], today, fr
     return { ...r, date: shifted, dateInferred: true };
   });
 
-  // Cricsheet no longer supplies innings; the parameter stays so the merge keeps
-  // working if a second source is ever added back.
+  // Kept so the merge still works if a second source is ever added back.
   for (const r of cricsheetRows) merged.set(key(r), { ...r, sources: ['cricsheet'] });
 
   for (const c of crexRows) {
@@ -87,50 +45,50 @@ export function mergePerformances({ crexRows = [], cricsheetRows = [], today, fr
     const existing = merged.get(k);
 
     if (!existing) {
-      // CREX carries the opponent inside the fixture string ("3rd T20 vs SL") rather
-      // than as its own field, so recover it there before the row reaches the page —
-      // otherwise every CREX-only row reads "AUS v —".
-      const opp = c.opponent ?? c.fixture?.match(/\bvs\s+([A-Za-z ]+)$/i)?.[1]?.trim() ?? null;
+      // The opponent is read from the fixture CREX printed ("3rd T20 vs SL") and
+      // nowhere else. A fixture that names no opponent — "54th Test, 1st Inn" — has
+      // none recorded, and the page says so rather than guessing one.
+      const opponent =
+        c.opponent ?? c.fixture?.match(/\bvs\s+([A-Za-z0-9 .'-]+)$/i)?.[1]?.trim() ?? null;
 
-      merged.set(k, {
-        ...c,
-        team: expandTeam(c.team),
-        opposition: expandTeam(c.opposition ?? opp),
-        competition: expandCompetition(c.competition),
-        sources: ['crex'],
-        // A CREX-only row has no ball-by-ball backing, so mark it: the UI can then
-        // avoid implying a precision the row does not have.
-        approximate: true,
-      });
+      merged.set(k, { ...c, opposition: c.opposition ?? opponent, sources: ['crex'] });
       continue;
     }
 
     merged.set(k, {
       ...existing,
-      // Cricsheet's aggregation is derived from deliveries, so it is kept where present.
       batting: existing.batting ?? c.batting,
       bowling: existing.bowling ?? c.bowling,
-      competition: preferName(c.competition, existing.competition),
       // A source may contribute the same innings twice (batting and bowling are
       // separate views of one row), so keep the list distinct.
       sources: [...new Set([...existing.sources, 'crex'])],
     });
   }
 
-  // A fixture that names a format its tournament cannot host ("1st ODI vs WI"
-  // inside "Punjab T20 2026") is a row that picked up the wrong card's context —
-  // it happens when a match is still being played. Drop rather than display.
-  const T20_LEAGUE = /(T20|Hundred|MLC|CPL|DPL|ETPL|TNPL|KCL|GSL|VPL)\b/i;
-  const mismatched = (r) =>
-    T20_LEAGUE.test(r.competition ?? '') && /\b(ODI|Test)\b/i.test(r.fixture ?? '');
+  // A card click that does not re-render cleanly leaves the previous tournament's
+  // innings on screen while the walk has moved on, so one match can arrive under
+  // two or three competitions depending on whose page it came from. It is the same
+  // event, so the name most players agree on wins.
+  const votes = new Map();
+  for (const r of merged.values()) {
+    if (!r.date || !r.fixture || !r.competition) continue;
+    const k = `${r.date}|${r.fixture}`;
+    if (!votes.has(k)) votes.set(k, new Map());
+    const tally = votes.get(k);
+    tally.set(r.competition, (tally.get(r.competition) ?? 0) + 1);
+  }
+  for (const r of merged.values()) {
+    if (!r.date || !r.fixture) continue;
+    const tally = votes.get(`${r.date}|${r.fixture}`);
+    if (!tally || tally.size < 2) continue;
+    const winner = [...tally].sort((a, b) => b[1] - a[1])[0][0];
+    if (winner !== r.competition) {
+      r.competition = winner;
+      r.competitionCorrected = true;
+    }
+  }
 
-  // CREX player pages reach back over past seasons. This is a current-season
-  // tracker, so anything before the season start is dropped rather than shown
-  // alongside this year's form.
-  const rows = [...merged.values()]
-    .filter((r) => !mismatched(r))
-    .filter((r) => !from || !r.date || r.date >= from);
-
+  const rows = [...merged.values()].filter((r) => !from || !r.date || r.date >= from);
   return rows.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
 }
 

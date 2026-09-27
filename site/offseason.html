@@ -1241,6 +1241,17 @@ function emptyChart(msg) {
   return `<div class="spark-none">${esc(msg)}</div>`;
 }
 
+/**
+ * "England v Sri Lanka", or just "Sussex" when the opponent is unknown. A domestic
+ * multi-innings scorecard names only the player's own side, and printing "Sussex v —"
+ * reads as a missing value rather than as something CREX does not publish.
+ */
+function sides(r) {
+  const team = r.team || '';
+  if (!r.opposition) return team || 'Match';
+  return `${team} v ${r.opposition}`;
+}
+
 function figure(r) {
   const b = r.batting, w = r.bowling;
   const bat = b && b.balls
@@ -1265,7 +1276,7 @@ function bigRow(r, p) {
     <div>
       <div class="eyebrow">Performance of the day</div>
       <div class="hl-name">${esc(p?.name ?? r.name)}</div>
-      <div class="hl-ctx"><b>${esc(c || '—')}</b> · ${esc(comp(r.competition))} · ${esc(r.team)} v ${esc(r.opposition ?? '—')}</div>
+      <div class="hl-ctx"><b>${esc(c || '—')}</b> · ${esc(comp(r.competition))} · ${esc(sides(r))}</div>
     </div>
     <div class="hl-fig"><b>${lead.v}</b><span>${lead.l}</span></div>
   </button>`;
@@ -1277,7 +1288,7 @@ function smallRow(r) {
   return `<button class="row" data-team="${esc(c)}" data-id="${esc(r.playerId)}">
     <span class="badge">${ABBR[c] ?? '—'}</span>
     <span class="who"><b>${esc(p?.name ?? r.name)}</b><span>${esc(c || '—')}</span></span>
-    <span class="where"><b>${esc(comp(r.competition))}<span class="tag">${esc(r.format)}</span></b><span>${esc(r.team)} v ${esc(r.opposition ?? '—')}</span></span>
+    <span class="where"><b>${esc(comp(r.competition))}<span class="tag">${esc(r.format)}</span></b><span>${esc(sides(r))}</span></span>
     <span class="fig">${figure(r)}</span>
   </button>`;
 }
@@ -1361,7 +1372,7 @@ function drawPlayer() {
           <thead><tr><th>Date</th><th>Match</th><th style="text-align:right">Figures</th></tr></thead>
           <tbody>${all.map((r) => `<tr>
             <td class="dt">${dShort(r.date)}</td>
-            <td class="mt"><b>${esc(comp(r.competition))}<span class="tag">${esc(r.format)}</span></b><span>${esc(r.team)} v ${esc(r.opposition ?? '—')}</span></td>
+            <td class="mt"><b>${esc(comp(r.competition))}<span class="tag">${esc(r.format)}</span></b><span>${esc(sides(r))}</span></td>
             <td class="rt">${figure(r)}</td>
           </tr>`).join('')}</tbody>
         </table></div>` : `<div class="blank"><b>No matches yet</b><span>In the squad, but has not appeared${S.fmt ? ` in ${S.fmt}` : ''} this season.</span></div>`}

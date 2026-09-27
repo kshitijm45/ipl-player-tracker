@@ -338,15 +338,15 @@ async function readSeriesInnings(page, seriesUrl, slug, series, { maxMatches = 1
         hit.title.split(/[,|]/).slice(1).join(',').trim().slice(0, 60) ||
         'match';
       const stage = hit.title.match(/(\d+(?:st|nd|rd|th))-(T20|ODI|Test)/i);
-      // Scorecards carry no date, so the series window plus the match number is
-      // the only ordering available; the merge resolves it against the season.
-      const date = normaliseSeriesDate(hit.date) ?? seriesDateFor(series, stage?.[1]);
+      // Only a date CREX actually printed. A scorecard without one yields a row
+      // with no date rather than a guess derived from the series window.
+      const date = normaliseSeriesDate(hit.date);
 
       for (const cells of hit.rows) {
         const parsed = parseScorecardCells(cells);
         if (!parsed) continue;
         out.push({
-          fixture: stage ? `${stage[1]} ${stage[2]} — ${fixture}` : fixture,
+          fixture,
           date,
           format: stage ? normaliseFormat(stage[2]) : 'Unknown',
           competition: series?.name ?? null,
@@ -361,20 +361,6 @@ async function readSeriesInnings(page, seriesUrl, slug, series, { maxMatches = 1
     }
   }
   return out;
-}
-
-/**
- * Spread a series' matches across its own window when the scorecards carry no
- * date: "Jul 1 - Jul 19" with a 2nd match puts it a couple of days in. Approximate
- * by design, and only ever used for rows that would otherwise have no date at all.
- */
-function seriesDateFor(series, ordinal) {
-  if (!series?.from) return null;
-  const n = ordinal ? parseInt(ordinal, 10) : 1;
-  const m = String(series.from).match(/^([A-Z][a-z]{2})\s+(\d{1,2})$/);
-  if (!m) return null;
-  const day = +m[2] + (Number.isFinite(n) ? (n - 1) * 2 : 0);
-  return `${day} ${m[1]}`;
 }
 
 /**
@@ -460,7 +446,13 @@ async function readTable(page) {
  * latter is how a franchise is attached to an innings.
  */
 export function parseSeriesCard(label) {
-  const name = label.match(/^(.+?)(?=[A-Z][a-z]{2}\s\d)/)?.[1]?.trim() ?? label.slice(0, 40).trim();
+  // Anchor on the date *window* ("Apr 3 - Sep 27"), not on the first month-like
+  // word: a tournament called "County Div-Two 2026" contains "Two 2026", which
+  // looks like a month and a day, and truncates the name to "County Div-".
+  const name =
+    label.match(/^(.+?)(?=[A-Z][a-z]{2}\s+\d{1,2}\s*-\s*[A-Z][a-z]{2}\s+\d{1,2})/)?.[1]?.trim() ??
+    label.match(/^(.+?)(?=[A-Z][a-z]{2}\s\d)/)?.[1]?.trim() ??
+    label.slice(0, 40).trim();
   const played = label.match(/Played for\s+([A-Z]{2,4})/)?.[1] ?? null;
   const span = label.match(/([A-Z][a-z]{2}\s\d{1,2})\s*-\s*([A-Z][a-z]{2}\s\d{1,2})/);
   return { name, playedFor: played, from: span?.[1] ?? null, to: span?.[2] ?? null };
