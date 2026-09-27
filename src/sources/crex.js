@@ -304,6 +304,13 @@ async function readSeriesInnings(page, seriesUrl, slug, series, { maxMatches = 1
       await page.waitForTimeout(1300);
 
       const hit = await page.evaluate((want) => {
+        // A match still in progress has no settled scorecard, and its rows carry
+        // the wrong tournament context, so the whole page is skipped.
+        const state = document.body.innerText.slice(0, 400);
+        if (/\b(Live|Yet to bat|Innings Break|Match yet to begin|Starts in)\b/i.test(state)) {
+          return { rows: [], date: null, title: document.title, live: true };
+        }
+
         const rows = [];
         for (const tr of document.querySelectorAll('tr')) {
           const a = tr.querySelector(`a[href^="/player/${want}"]`);
@@ -418,9 +425,18 @@ export function parseScorecardCells(cells) {
   return { batting: { runs: +a, balls: +b, out: !/NOT OUT/i.test(who) } };
 }
 
-/** Read the innings table as it currently stands. */
+/**
+ * Read the innings table as it currently stands.
+ *
+ * A match still being played is skipped. CREX shows those with the score cell
+ * reading "Live", "Yet to bat" or similar, and an unfinished row cannot be trusted
+ * anyway: its figures are partial and, worse, the tournament label attached to it
+ * does not reliably belong to it — a live India–West Indies ODI came through
+ * labelled "Punjab T20 2026".
+ */
 async function readTable(page) {
   return page.evaluate(() => {
+    const UNFINISHED = /\b(live|yet to bat|innings break|stumps|rain|delay|abandon|no result|upcoming|starts|vs\s*$)\b/i;
     const out = [];
     for (const tr of document.querySelectorAll('tr.tableClr')) {
       const cells = [...tr.querySelectorAll('td')].map((td) =>
@@ -429,6 +445,9 @@ async function readTable(page) {
       if (cells.length < 3) continue;
       const [match, date, score] = cells;
       if (!match || !score) continue;
+      if (UNFINISHED.test(score) || UNFINISHED.test(match)) continue;
+      // A completed innings always reports a figure: "34 (15)", "2-23" or "dnb".
+      if (!/^\d+\*?\s*\(\d+\)$|^\d+\s*[-/]\s*\d+$|^(dnb|did not bat|-)$/i.test(score)) continue;
       out.push({ match, date, score });
     }
     return out;

@@ -117,12 +117,19 @@ export function mergePerformances({ crexRows = [], cricsheetRows = [], today, fr
     });
   }
 
+  // A fixture that names a format its tournament cannot host ("1st ODI vs WI"
+  // inside "Punjab T20 2026") is a row that picked up the wrong card's context —
+  // it happens when a match is still being played. Drop rather than display.
+  const T20_LEAGUE = /(T20|Hundred|MLC|CPL|DPL|ETPL|TNPL|KCL|GSL|VPL)\b/i;
+  const mismatched = (r) =>
+    T20_LEAGUE.test(r.competition ?? '') && /\b(ODI|Test)\b/i.test(r.fixture ?? '');
+
   // CREX player pages reach back over past seasons. This is a current-season
   // tracker, so anything before the season start is dropped rather than shown
   // alongside this year's form.
-  const rows = from
-    ? [...merged.values()].filter((r) => !r.date || r.date >= from)
-    : [...merged.values()];
+  const rows = [...merged.values()]
+    .filter((r) => !mismatched(r))
+    .filter((r) => !from || !r.date || r.date >= from);
 
   return rows.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
 }
