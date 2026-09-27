@@ -170,7 +170,11 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
         // Only rows whose date resolved to a real day are usable.
         if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date ?? '')) continue;
         if (r.date < from) continue;
-        crexRows.push({ ...r, playerId });
+        // A slug-pinned player has no Cricsheet id, so his rows arrive keyed by
+        // slug while his record is keyed "unmapped:<name>". Rewrite the key so the
+        // two actually join — otherwise the innings are scraped and then dropped.
+        const owner = slugOwner.get(playerId);
+        crexRows.push({ ...r, playerId: owner ? `unmapped:${owner}` : playerId });
       }
     }
   }
