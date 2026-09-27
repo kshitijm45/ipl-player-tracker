@@ -78,7 +78,8 @@ export function mergePerformances({ crexRows = [], cricsheetRows = [], today, fr
     return { ...r, date: shifted, dateInferred: true };
   });
 
-  // Cricsheet first, so CREX can overwrite the fields it is better at.
+  // Cricsheet no longer supplies innings; the parameter stays so the merge keeps
+  // working if a second source is ever added back.
   for (const r of cricsheetRows) merged.set(key(r), { ...r, sources: ['cricsheet'] });
 
   for (const c of crexRows) {

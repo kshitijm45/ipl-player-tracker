@@ -151,7 +151,7 @@ export class CrexSource extends Source {
    * So a full read walks the cards in turn. `batting` and `bowling` are separate
    * views of the same table, so each card is read twice and the two merged by fixture.
    */
-  async fetchMatches(slug, { maxAgeMs = 6 * 3600e3, maxSeries = 12 } = {}) {
+  async fetchMatches(slug, { maxAgeMs = 6 * 3600e3, maxSeries = 12, since = null } = {}) {
     const key = `matches_${slug}_all`;
     const cached = this.readCache(key, maxAgeMs);
     if (cached) return cached;
@@ -177,6 +177,11 @@ export class CrexSource extends Source {
 
       for (let i = 0; i < cardCount; i++) {
         const series = parseSeriesCard(labels[i]);
+
+        // Skip tournaments that finished before the window of interest. Each card
+        // costs a page load, and a re-scrape aimed at recent cricket has no reason
+        // to walk the IPL and everything before it again.
+        if (since && seriesEndedBefore(series, since)) continue;
 
         // Some cards re-render the table in place; others navigate to the series
         // page and abandon the player context. Returning to the player page before
@@ -363,6 +368,28 @@ function seriesDateFor(series, ordinal) {
   if (!m) return null;
   const day = +m[2] + (Number.isFinite(n) ? (n - 1) * 2 : 0);
   return `${day} ${m[1]}`;
+}
+
+/**
+ * Did this tournament finish before the cutoff?
+ *
+ * A card carries its window as "Jul 21 - Aug 16" with no year, so the year comes
+ * from the tournament label. A card whose window cannot be read is never skipped:
+ * losing a series costs more than re-reading one.
+ */
+export function seriesEndedBefore(series, cutoff) {
+  if (!series?.to) return false;
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const m = String(series.to).match(/^([A-Z][a-z]{2})\s+(\d{1,2})$/);
+  if (!m) return false;
+  const mi = MON.indexOf(m[1]);
+  if (mi < 0) return false;
+
+  const year = String(series.name ?? '').match(/(20\d{2})/)?.[1];
+  if (!year) return false;
+
+  const end = `${year}-${String(mi + 1).padStart(2, '0')}-${String(+m[2]).padStart(2, '0')}`;
+  return end < cutoff;
 }
 
 /** "11 Jul 2026" -> "11 Jul", matching the shape the player table returns. */

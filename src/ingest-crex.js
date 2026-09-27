@@ -60,7 +60,14 @@ export function seasonYearFor(competition, month, fallbackYear = 2026) {
   return fallbackYear;
 }
 
-export async function ingest({ concurrency = 4, limit = Infinity, season = 2026 } = {}) {
+/**
+ * The IPL ended on 31 May 2026. Everything from that point is what this tracker
+ * follows, so the scrape skips tournaments that finished earlier rather than
+ * re-reading the IPL and the season before it on every run.
+ */
+export const POST_IPL = '2026-06-01';
+
+export async function ingest({ concurrency = 4, limit = Infinity, season = 2026, since = POST_IPL } = {}) {
   const pins = JSON.parse(readFileSync(CREX_PATH, 'utf8')).pins ?? {};
   const entries = Object.entries(pins).slice(0, limit);
 
@@ -80,12 +87,15 @@ export async function ingest({ concurrency = 4, limit = Infinity, season = 2026 
     while (queue.length) {
       const [playerId, pin] = queue.shift();
       try {
-        const rows = await source.fetchMatches(pin.slug, { maxAgeMs: 24 * 3600e3 });
-        results[playerId] = rows.map((r) => ({
-          ...r,
-          date: resolveDate(r.date, r.competition, season) ?? r.date,
-          playerId,
-        }));
+        const rows = await source.fetchMatches(pin.slug, { maxAgeMs: 24 * 3600e3, since });
+        results[playerId] = rows
+          .map((r) => ({
+            ...r,
+            date: resolveDate(r.date, r.competition, season) ?? r.date,
+            playerId,
+          }))
+          // A tournament spanning the cutoff still yields earlier innings; drop them.
+          .filter((r) => !since || !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || r.date >= since);
         done++;
       } catch {
         failed++;

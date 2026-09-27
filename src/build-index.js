@@ -32,7 +32,11 @@ const trustedCrex = existsSync(OVERRIDE_FILE)
   ? JSON.parse(readFileSync(OVERRIDE_FILE, 'utf8')).trustedCrexNames ?? {}
   : {};
 
-const SEASON_START = process.env.SEASON_START ?? '2026-01-01';
+// The tracker follows what IPL players do *after* the IPL, so the season window
+// opens the day the final was played.
+const SEASON_START = process.env.SEASON_START ?? '2026-06-01';
+/** The IPL season itself, used only to work out who is in a squad. */
+const IPL_SEASON_START = '2026-01-01';
 const OUT_DIR = new URL('../site/data', import.meta.url).pathname;
 
 /** Competitions that are mostly associate/qualifier noise for an IPL-fan audience. */
@@ -44,7 +48,14 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
 
   // Who actually turned out in the IPL this season? Used both to scope the tracked
   // set and as a disambiguation prior when resolving squad-list names.
-  const { performances: iplPerfs } = await source.fetchPerformances({ from, slugs: ['ipl'] });
+  //
+  // This reads the IPL season itself, not the post-IPL window the rest of the build
+  // uses: the squad is defined by who played in the IPL, while the performances are
+  // what those players did afterwards. Sharing one cutoff would empty the roster.
+  const { performances: iplPerfs } = await source.fetchPerformances({
+    from: IPL_SEASON_START,
+    slugs: ['ipl'],
+  });
   const appearedIds = new Set(iplPerfs.map((p) => p.playerId));
 
   const { members: squadMembers, unresolved } = resolveSquads({
@@ -135,15 +146,12 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
 
   const trackedIds = new Set([...tracked.values()].map((t) => t.id).filter(Boolean));
 
-  // Now pull everything those players did anywhere else this year.
-  const { performances: allPerfs, quarantined } = await source.fetchPerformances({
-    from,
-    slugs: slugs ?? Object.keys(COMPETITIONS),
-  });
-  const cricsheetRows = allPerfs.filter((p) => trackedIds.has(p.playerId));
+  // CREX is the only source of match data. Cricsheet is still read above to work
+  // out who is in a squad, because its register is what gives each player a stable
+  // identity — but no innings come from it.
+  const quarantined = [];
+  const cricsheetRows = [];
 
-  // CREX leads on recency and on tournaments Cricsheet does not carry; Cricsheet
-  // backs it with ball-by-ball figures. See src/core/merge.js for the precedence.
   const crexRows = [];
   if (existsSync(CREX_PERF_PATH)) {
     const raw = JSON.parse(readFileSync(CREX_PERF_PATH, 'utf8')).byPlayer ?? {};
