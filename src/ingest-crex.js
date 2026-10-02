@@ -211,5 +211,20 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       process.exit(1);
     }
   }
-  await ingest(opts);
+  const result = await ingest(opts);
+
+  // Exit explicitly rather than waiting for the event loop to drain.
+  //
+  // Everything is already written to disk by this point, but the run opens a browser
+  // per worker and another for each retry, and a fetch that failed part-way can leave
+  // a page or a pipe behind. Any one of those keeps Node alive indefinitely: the
+  // summary prints, the function returns, and the process simply never ends. At a
+  // terminal that looks like a pause; in CI the step sat for an hour past the end of
+  // the work before the job timed out.
+  //
+  // There is nothing left to wait for, so say so — after stdout has drained, since
+  // process.exit() would otherwise cut off the summary that was just written.
+  const code = result.failed && !result.players ? 1 : 0;
+  if (process.stdout.writableLength) process.stdout.once('drain', () => process.exit(code));
+  else process.exit(code);
 }

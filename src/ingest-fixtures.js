@@ -375,4 +375,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     `${r.fixtures} fixtures in the next 2 days — ${r.withSquad} with squads read, ` +
       `${r.withPlayers} featuring tracked players (${r.players} appearances)`
   );
+
+  // Exit explicitly, for the same reason the player scrape does: this opens a browser
+  // and visits a page per fixture, and one stray handle would leave the process
+  // running long after the file is written.
+  if (process.stdout.writableLength) process.stdout.once('drain', () => process.exit(0));
+  else process.exit(0);
 }
