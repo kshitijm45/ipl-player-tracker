@@ -195,7 +195,13 @@ export class CrexSource extends Source {
   async fetchMatches(slug, { maxAgeMs = 6 * 3600e3, since = null } = {}) {
     const key = `matches_${slug}_all`;
     const cached = this.readCache(key, maxAgeMs);
-    if (cached) return cached;
+    // A cached read is reused unless it holds a figure from a match that was still
+    // being played when it was taken. Those are re-fetched every run until the
+    // tournament's last day has passed, so a provisional number is replaced by the
+    // settled one rather than frozen: Mukesh Kumar was stored at "84 (102)" during an
+    // innings he finished on 0 (0), and without this he would have carried that score
+    // for the five days of the match.
+    if (cached && !cached.some((r) => r.provisional)) return cached;
 
     // The series list renders as a side panel only at desktop width.
     const page = await (await this.browser()).newPage({
@@ -203,6 +209,7 @@ export class CrexSource extends Source {
       viewport: { width: 1600, height: 1000 },
     });
     const collected = new Map();
+    const today = new Date().toISOString().slice(0, 10);
 
     try {
       await page.goto(`https://crex.com/player/${slug}/matches`, {
@@ -255,6 +262,7 @@ export class CrexSource extends Source {
             const series = seriesForDate(windows, r.date);
             const row = parseMatchRow({ ...r, series });
             if (!row) continue;
+            if (seriesStillRunning(series, today)) row.provisional = true;
             // Without a tournament the row cannot be placed or dated; drop it
             // rather than attribute it to whatever was selected.
             if (!row.competition) continue;
@@ -419,6 +427,10 @@ export class CrexSource extends Source {
               // against Sri Lanka came back as "County Div-One 2026", played for SUR.
               const row = parseMatchRow({ ...r, series: w });
               if (!row?.competition) continue;
+              // A tournament still under way can print a figure that is not the
+              // player's final one for the innings — the score on the board at the
+              // moment the page was read. Mark it so the next run replaces it.
+              if (seriesStillRunning(w, today)) row.provisional = true;
               const k = `${row.fixture}|${row.date}`;
               collected.set(k, { ...(collected.get(k) ?? {}), ...row });
             }
@@ -446,6 +458,38 @@ export class CrexSource extends Source {
   async pause() {
     await new Promise((r) => setTimeout(r, this.delayMs));
   }
+}
+
+/**
+ * Is this tournament still being played?
+ *
+ * A match in progress cannot be told apart from a finished one by its row alone: the
+ * table prints a well-formed figure either way, and mid-innings that figure can be
+ * the team's running total rather than the player's. Mukesh Kumar's Irani Cup row
+ * was read as "84 (102)" while he was in fact 0 (0) and had bowled 2-84 — the 84 was
+ * the score on the board at the time, and the scrape had no way to see that from the
+ * row itself.
+ *
+ * The card's own window is the signal that works: a tournament whose last day has
+ * not yet passed may still be producing provisional figures, so its most recent day
+ * is held back until the day is over. Everything earlier in the same tournament is
+ * finished and is kept.
+ */
+export function seriesStillRunning(series, today) {
+  if (!series?.to) return false;
+  const end = windowDate(series.to, series.name);
+  return end ? end >= today : false;
+}
+
+/** "Oct 5" + "Irani Cup 2026" -> "2026-10-05". */
+function windowDate(dayMonth, name) {
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const m = String(dayMonth ?? '').match(/^([A-Z][a-z]{2})\s+(\d{1,2})$/);
+  if (!m) return null;
+  const mi = MON.indexOf(m[1]);
+  const year = String(name ?? '').match(/(20\d{2})/)?.[1];
+  if (mi < 0 || !year) return null;
+  return `${year}-${String(mi + 1).padStart(2, '0')}-${String(+m[2]).padStart(2, '0')}`;
 }
 
 /**
