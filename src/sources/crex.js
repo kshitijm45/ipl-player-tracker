@@ -194,14 +194,23 @@ export class CrexSource extends Source {
    */
   async fetchMatches(slug, { maxAgeMs = 6 * 3600e3, since = null } = {}) {
     const key = `matches_${slug}_all`;
+    const today = new Date().toISOString().slice(0, 10);
     const cached = this.readCache(key, maxAgeMs);
-    // A cached read is reused unless it holds a figure from a match that was still
-    // being played when it was taken. Those are re-fetched every run until the
-    // tournament's last day has passed, so a provisional number is replaced by the
-    // settled one rather than frozen: Mukesh Kumar was stored at "84 (102)" during an
-    // innings he finished on 0 (0), and without this he would have carried that score
-    // for the five days of the match.
-    if (cached && !cached.some((r) => r.provisional)) return cached;
+    // A cached read is reused unless it may hold a figure from a match that had not
+    // finished when it was taken. Those are re-fetched every run until the figure can
+    // no longer change: Mukesh Kumar was stored at "84 (102)" during an innings he
+    // finished on 0 (0), and without this he would carry that score for the five days
+    // of the match.
+    //
+    // The test is the row's own date, not its `provisional` flag. A flag is only
+    // present if the code that wrote the cache knew to set one, so trusting it would
+    // mean rows cached before this existed could never refresh themselves — exactly
+    // what left Rishabh Pant and five others unmarked in the same Irani Cup match
+    // that Mukesh Kumar was marked in. A date is written by every version.
+    //
+    // Multi-day cricket is the reason for the window rather than just "today": a Test
+    // innings begun four days ago can still be in progress now.
+    if (cached && !cached.some((r) => mayStillChange(r, today))) return cached;
 
     // The series list renders as a side panel only at desktop width.
     const page = await (await this.browser()).newPage({
@@ -209,7 +218,6 @@ export class CrexSource extends Source {
       viewport: { width: 1600, height: 1000 },
     });
     const collected = new Map();
-    const today = new Date().toISOString().slice(0, 10);
 
     try {
       await page.goto(`https://crex.com/player/${slug}/matches`, {
@@ -458,6 +466,37 @@ export class CrexSource extends Source {
   async pause() {
     await new Promise((r) => setTimeout(r, this.delayMs));
   }
+}
+
+/**
+ * Could this cached row's figure still change?
+ *
+ * True while the row is flagged provisional, and true for any row dated within the
+ * last few days, because a multi-day match begun earlier in the week may still be
+ * going. Being wrong here only costs one extra page load; being wrong the other way
+ * freezes a half-finished score on the page for the length of the match.
+ */
+function mayStillChange(row, today) {
+  if (row?.provisional) return true;
+
+  // The cache holds CREX's own "1 Oct" form; the ISO conversion happens later, in
+  // the ingest. Comparing against a YYYY-MM-DD pattern here matched nothing, so every
+  // cached row looked settled and nothing ever refreshed.
+  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const m = String(row?.date ?? '').match(/^(\d{1,2})\s+([A-Z][a-z]{2})$/);
+  if (!m) return false;
+  const mi = MON.indexOf(m[2]);
+  if (mi < 0) return false;
+
+  // The row carries no year. Take the one that puts it nearest to today, so a
+  // December row read in January is not mistaken for one eleven months away.
+  const year = +today.slice(0, 4);
+  const asDate = (y) => `${y}-${String(mi + 1).padStart(2, '0')}-${String(+m[1]).padStart(2, '0')}`;
+  const candidates = [asDate(year - 1), asDate(year), asDate(year + 1)];
+  const cutoff = new Date(Date.parse(today) - 6 * 864e5).toISOString().slice(0, 10);
+
+  // Six days covers a five-day Test and the day it finishes on.
+  return candidates.some((d) => d >= cutoff && d <= today);
 }
 
 /**
