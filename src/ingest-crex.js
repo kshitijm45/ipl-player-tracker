@@ -65,18 +65,44 @@ export function seasonYearFor(competition, month, fallbackYear = 2026) {
  * follows, so the scrape skips tournaments that finished earlier rather than
  * re-reading the IPL and the season before it on every run.
  */
-export const POST_IPL = '2026-06-01';
+export const POST_IPL = process.env.SEASON_START ?? '2026-06-01';
 
-export async function ingest({ concurrency = 4, limit = Infinity, season = 2026, since = POST_IPL } = {}) {
+/**
+ * How long a scraped player page stays usable.
+ *
+ * The daily job sets this just under 24 hours so a scheduled run refetches every
+ * player once a day, while a re-run on the same day reuses what is already cached
+ * rather than spending another ninety minutes on CREX.
+ */
+export const CACHE_MS = (Number(process.env.CACHE_HOURS) || 24) * 3600e3;
+
+/**
+ * How many player pages are read at once.
+ *
+ * Four was too many once each card had to be selected twice: pages timed out, and
+ * because a failed fetch returned an empty list rather than throwing, a run reported
+ * "259 players, 0 failed" while seventy of them — Archer, Rashid Khan, Shreyas Iyer —
+ * had quietly lost every innings. Two is slower and finishes intact.
+ */
+export const CONCURRENCY = Number(process.env.SCRAPE_CONCURRENCY) || 2;
+
+export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, season = 2026, since = POST_IPL } = {}) {
   const file = JSON.parse(readFileSync(CREX_PATH, 'utf8'));
   const pins = file.pins ?? {};
   // Players with no Cricsheet id are keyed by name; their rows are stored under the
   // slug instead, which is the only identity they have.
   const slugPins = file.slugPins ?? {};
-  const entries = [
+  const all = [
     ...Object.entries(pins),
     ...Object.entries(slugPins).map(([, pin]) => [pin.slug, pin]),
-  ].slice(0, limit);
+  ];
+  const entries = Number.isFinite(limit) ? all.slice(0, limit) : all;
+  if (!entries.length) {
+    throw new Error(
+      `crex ingest: nothing to scrape (${all.length} pins, limit=${limit}). Refusing to ` +
+        'rewrite the existing file, which would report success for a run that fetched nothing.'
+    );
+  }
 
   const existing = existsSync(OUT_PATH)
     ? JSON.parse(readFileSync(OUT_PATH, 'utf8'))
@@ -95,7 +121,7 @@ export async function ingest({ concurrency = 4, limit = Infinity, season = 2026,
     while (queue.length) {
       const [playerId, pin] = queue.shift();
       try {
-        const rows = await source.fetchMatches(pin.slug, { maxAgeMs: 24 * 3600e3, since });
+        const rows = await source.fetchMatches(pin.slug, { maxAgeMs: CACHE_MS, since });
         results[playerId] = rows
           .map((r) => ({
             ...r,
@@ -164,6 +190,23 @@ function flush(byPlayer) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const limit = process.argv[2] ? +process.argv[2] : Infinity;
-  await ingest({ limit });
+  // Named flags, and a bare number still means --limit. A positional string used to
+  // be coerced with `+`, so `--since=2026-06-01` became NaN, `slice(0, NaN)` emptied
+  // the queue, and the run rewrote the previous file reporting "0 players" — a
+  // no-op that looked like a successful scrape.
+  const argv = process.argv.slice(2);
+  const opts = {};
+  for (const a of argv) {
+    const flag = a.match(/^--([a-z]+)=(.+)$/);
+    if (flag) {
+      const [, k, v] = flag;
+      opts[k] = /^\d+$/.test(v) ? +v : v;
+    } else if (/^\d+$/.test(a)) {
+      opts.limit = +a;
+    } else {
+      console.error(`ingest-crex: unrecognised argument "${a}"`);
+      process.exit(1);
+    }
+  }
+  await ingest(opts);
 }

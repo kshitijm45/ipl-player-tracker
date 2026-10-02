@@ -7,7 +7,14 @@
   "scripts": {
     "setup": "node src/cli/setup.js",
     "track": "node src/cli/index.js",
-    "digest": "node src/cli/digest.js"
+    "digest": "node src/cli/digest.js",
+    "scrape": "node src/ingest-crex.js",
+    "fixtures": "node src/ingest-fixtures.js",
+    "build": "node src/build-index.js && node src/bundle-site.js",
+    "refresh": "npm run scrape && npm run fixtures && npm run build"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "1.48.0"
+  }
 }

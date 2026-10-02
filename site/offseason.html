@@ -782,6 +782,8 @@
   }
 
   /* ─── fixtures ─── */
+  .fx-side { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+             color: var(--muted); margin: 6px 0 3px; }
   .fixtures { display: flex; flex-direction: column; gap: 22px; }
   .fx-day > .eyebrow { margin-bottom: 10px; }
   .fx {
@@ -911,6 +913,10 @@
 </div>
 
 <script>
+// Replaced with the built index by src/bundle-site.js, which writes offseason-live.html.
+// The empty stub keeps this source file openable on its own without throwing.
+window.__DATA__ = { players: [], perfs: [], days: [], meta: {}, fixtures: [] };
+
 const IPL = 'Indian Premier League';
 const S = { view: 'today', club: '', player: null, fmt: '', q: '', day: null };
 let P = [], F = [], D = [], M = {}, FX = [], byP = new Map(), byD = new Map();
@@ -1195,9 +1201,24 @@ function trail(days, from) {
  * tracked players have been turning out are shown — otherwise this is a wall of
  * matches nobody here cares about.
  */
+/** "4:30 AM" -> 270, so fixtures sort by clock rather than by first digit. */
+function minutes(t) {
+  const m = String(t ?? '').match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!m) return 1e9;
+  const h = +m[1] % 12 + (m[3].toUpperCase() === 'PM' ? 12 : 0);
+  return h * 60 + +m[2];
+}
+
 function comingUp() {
   const today = new Date().toISOString().slice(0, 10);
-  const next = FX.filter((f) => f.watch && f.date >= today).slice(0, 6);
+  // A fixture earns its place by naming a tracked player in one of the two squads,
+  // which CREX publishes for the match itself. The old test — "is this a competition
+  // our players turn up in" — put a wall of unrelated matches on the page.
+  // Narrowed to the club in view, so picking CSK does not list a match that is on
+  // only because a Mumbai player is in it.
+  const next = FX.map((f) => ({ ...f, players: (f.players ?? []).filter((p) => inScope(p)) }))
+    .filter((f) => f.date >= today && f.players.length)
+    .sort((a, b) => a.date.localeCompare(b.date) || minutes(a.time) - minutes(b.time));
   if (!next.length) return '';
 
   const byDay = new Map();
@@ -1207,24 +1228,32 @@ function comingUp() {
   }
 
   return `<div class="gap"></div>
-    <div class="sect"><h2>Coming up</h2><p>Fixtures in competitions your players are in</p></div>
+    <div class="sect"><h2>Coming up</h2><p>Next two days, with the tracked players named in each squad</p></div>
     <div class="fixtures">
       ${[...byDay.entries()].map(([d, list]) => `
         <div class="fx-day">
           <div class="eyebrow">${dLong(d)}</div>
           ${list.map((f) => {
+            // Grouped by side, so a fixture reads as who is playing whom rather than
+            // as one undifferentiated list of names.
             const who = (f.players ?? [])
               .map((x) => ({ p: P.find((y) => y.id === x.playerId), side: x.side }))
               .filter((x) => x.p);
+            const sides = [f.teamA, f.teamB]
+              .map((team) => ({ team, list: who.filter((x) => x.side === team) }))
+              .filter((g) => g.list.length);
             return `<div class="fx">
-              <span class="fx-time mono">${esc(f.time)}</span>
+              <span class="fx-time mono">${esc(f.time ?? '')}</span>
               <span class="fx-teams">
                 <b>${esc(f.teamA)}</b> v <b>${esc(f.teamB)}</b>
-                ${who.length ? `<span class="fx-who">${who.map((x) =>
-                  `<button class="fx-p" data-team="${esc(club1(x.p))}" data-id="${esc(x.p.id)}"
-                    title="${esc(x.p.name)} — ${esc(x.side)}">${esc(x.p.name)}</button>`).join('')}</span>` : ''}
+                ${sides.map((g) => `<span class="fx-who">
+                  <span class="fx-side">${esc(g.team)}</span>
+                  ${g.list.map((x) =>
+                    `<button class="fx-p" data-team="${esc(club1(x.p))}" data-id="${esc(x.p.id)}"
+                      title="${esc(x.p.name)} — ${esc(x.side)}">${esc(x.p.name)}</button>`).join('')}
+                </span>`).join('')}
               </span>
-              <span class="fx-comp">${esc(f.competition)}${f.stage ? ` · ${esc(f.stage)}` : ''}</span>
+              <span class="fx-comp">${esc(f.competition ?? '')}${f.stage ? ` · ${esc(f.stage)}` : ''}</span>
             </div>`;
           }).join('')}
         </div>`).join('')}

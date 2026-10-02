@@ -15,11 +15,14 @@
  * slugs are pinned to canonical Cricsheet identifiers in data/crex-players.json and
  * that mapping is the contract. No name matching happens at scrape time.
  *
- * Rules this adapter follows, because it is the fragile link in the chain:
- *   - it is never the only source for a player who exists in Cricsheet
+ * Everything is read from the player's own page. Match scorecards are not visited at
+ * all: selecting each series card re-renders the innings table in place, which gives
+ * the same figures in one page load per player instead of dozens.
+ *
+ * Rules this adapter follows, because it is the only source the site has:
  *   - every fetch is cached to disk; a run re-reads cache rather than re-fetching
  *   - failures are contained: a scrape error degrades one player, never the build
- *   - requests are serialised and rate-limited
+ *   - requests are rate-limited, and run at a small fixed concurrency
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -72,9 +75,19 @@ export class CrexSource extends Source {
     return this._browser;
   }
 
+  /**
+   * Chromium occasionally declines to exit after a long run of page opens, which
+   * leaves a finished scrape hanging with its data already written. The close is
+   * given a few seconds and then abandoned; the caller's work is done either way.
+   */
   async close() {
-    await this._browser?.close();
+    const b = this._browser;
     this._browser = null;
+    if (!b) return;
+    await Promise.race([
+      b.close().catch(() => {}),
+      new Promise((r) => setTimeout(r, 8000)),
+    ]);
   }
 
   cachePath(key) {
@@ -82,11 +95,19 @@ export class CrexSource extends Source {
     return join(CACHE_DIR, `${key.replace(/[^\w.-]/g, '_')}.json`);
   }
 
+  /**
+   * `maxAgeMs` of 0 means "do not use the cache at all", so it is compared as a
+   * number rather than for truthiness. Treating 0 as falsy skipped the expiry check
+   * and returned the stored copy unconditionally, which made every re-scrape and
+   * every verification silently read cache: a player whose fetch had once failed
+   * kept serving back the empty result that failure wrote.
+   */
   readCache(key, maxAgeMs) {
+    if (maxAgeMs === 0) return null;
     const f = this.cachePath(key);
     if (!existsSync(f)) return null;
     const raw = JSON.parse(readFileSync(f, 'utf8'));
-    if (maxAgeMs && Date.now() - raw.at > maxAgeMs) return null;
+    if (maxAgeMs != null && Date.now() - raw.at > maxAgeMs) return null;
     return raw.data;
   }
 
@@ -142,21 +163,30 @@ export class CrexSource extends Source {
   /**
    * Every innings CREX holds for a player, across every tournament.
    *
-   * The player's matches page opens on the most recent tournament only — four rows
-   * for a player who has actually had a full season. The rest sit behind the
-   * tournament cards (`div.sCard`), which are clickable despite carrying no href:
-   * clicking one re-renders the table with that tournament's full innings list
-   * (Archer's IPL card yields all 10 innings, Qualifier and Eliminator included).
+   * The matches page opens on the most recent tournament only. The rest sit behind
+   * the series cards in the left-hand list, and reaching them turns on two details
+   * that cost a long time to find:
    *
-   * So a full read walks the cards in turn. `batting` and `bowling` are separate
-   * views of the same table, so each card is read twice and the two merged by fixture.
+   *   - Click the card's date line (`.seriesDesc`), never the series name. The name
+   *     is a link to the series page, and following it abandons the table. The date
+   *     line is the card's own handler and swaps the panel in place.
+   *   - Select cards from the Batting view. The series list is per-discipline, so a
+   *     player who has never bowled has no list at all under Bowling.
+   *
+   * With both right, Buttler goes from 5 innings to 23 and Tilak Varma's three Duleep
+   * Trophy innings appear. Bowling figures and the format split come from the tab
+   * sweep that runs first; the card walk fills in the tournaments it could not see.
    */
-  async fetchMatches(slug, { maxAgeMs = 6 * 3600e3, maxSeries = 12, since = null } = {}) {
+  async fetchMatches(slug, { maxAgeMs = 6 * 3600e3, since = null } = {}) {
     const key = `matches_${slug}_all`;
     const cached = this.readCache(key, maxAgeMs);
     if (cached) return cached;
 
-    const page = await (await this.browser()).newPage({ userAgent: UA });
+    // The series list renders as a side panel only at desktop width.
+    const page = await (await this.browser()).newPage({
+      userAgent: UA,
+      viewport: { width: 1600, height: 1000 },
+    });
     const collected = new Map();
 
     try {
@@ -164,104 +194,41 @@ export class CrexSource extends Source {
         waitUntil: 'networkidle',
         timeout: 45000,
       });
-      await page.waitForTimeout(2200);
+      await page.waitForTimeout(2400);
 
-      // The Batting and Bowling tabs do not show the same tournaments. A bowler who
-      // only bowled in a competition has no card for it under Batting — Mohsin
-      // Khan's UP T20 2026 is absent there and present under Bowling — so the card
-      // list has to be read again inside each discipline rather than once up front.
-      const deferred = [];
-      const seenCards = new Set();
+      // Everything comes off the player page. The innings table is split two ways —
+      // Batting/Bowling, and a format tab (ALL / T20 / ODI / Test / T10 / 100B) —
+      // and walking those six tabs in both disciplines yields every innings CREX
+      // holds, bowling figures included.
+      //
+      // The table opens on one tournament, so the other series cards are selected
+      // in turn afterwards to reach the rest.
+      const cardWindows = new Map();
 
       for (const discipline of ['Batting', 'Bowling']) {
-        await page.goto(`https://crex.com/player/${slug}/matches`, {
-          waitUntil: 'networkidle',
-          timeout: 45000,
-        });
-        await page.waitForTimeout(2000);
-
         const dTab = page.locator(`text="${discipline}"`).first();
         if (await dTab.count()) {
           await dTab.click({ timeout: 6000 }).catch(() => {});
-          await page.waitForTimeout(1800);
+          await page.waitForTimeout(1600);
         }
 
-      const labels = await page.$$eval('.sCard', (cards) =>
-        cards.map((c) => (c.textContent || '').replace(/\s+/g, ' ').trim())
-      );
-      const cardCount = Math.min(labels.length, maxSeries);
-      // Every card's window, so a row can be attributed by its date. Reading the
-      // format tabs surfaces innings from tournaments other than the selected card,
-      // and tagging those with the active card's name is how a Duleep Trophy
-      // semi-final ended up filed under a one-day tour of Japan.
-      const windows = labels.slice(0, cardCount).map(parseSeriesCard).filter((w) => w?.name);
-
-      for (let i = 0; i < cardCount; i++) {
-        const series = parseSeriesCard(labels[i]);
-
-        // Skip tournaments that finished before the window of interest. Each card
-        // costs a page load, and a re-scrape aimed at recent cricket has no reason
-        // to walk the IPL and everything before it again.
-        if (since && seriesEndedBefore(series, since)) continue;
-        // The two tabs overlap heavily; a card read once need not be walked again.
-        const cardKey = `${discipline === 'Bowling' ? 'b' : 'a'}|${series?.name ?? labels[i]}`;
-        const sharedKey = series?.name ?? labels[i];
-        if (seenCards.has(sharedKey)) continue;
-        seenCards.add(sharedKey);
-
-        // Some cards re-render the table in place; others navigate to the series
-        // page and abandon the player context. Returning to the player page before
-        // each click makes the two behave the same, at the cost of a reload.
-        if (i > 0) {
-          try {
-            await page.goto(`https://crex.com/player/${slug}/matches`, {
-              waitUntil: 'networkidle',
-              timeout: 40000,
-            });
-            await page.waitForTimeout(1800);
-            // Re-select the discipline: a reload drops back to Batting, and the
-            // card indices only mean anything within the tab they came from.
-            const back = page.locator(`text="${discipline}"`).first();
-            if (await back.count()) {
-              await back.click({ timeout: 6000 }).catch(() => {});
-              await page.waitForTimeout(1500);
-            }
-          } catch {
-            break;
-          }
+        // Card labels differ per discipline: a tournament a player only bowled in
+        // has no card under Batting.
+        for (const label of await page.$$eval('.sCard', (cs) =>
+          cs.map((c) => (c.textContent || '').replace(/\s+/g, ' ').trim())
+        )) {
+          const w = parseSeriesCard(label);
+          if (w?.name && !cardWindows.has(w.name)) cardWindows.set(w.name, w);
         }
 
-        try {
-          await page.locator('.sCard').nth(i).click({ timeout: 8000 });
-          // A navigating card needs longer than an in-place re-render before the
-          // URL settles; checking too early reads the player page and the series
-          // is silently dropped.
-          await page.waitForTimeout(2600);
-        } catch {
-          continue;
-        }
+        const windows = [...cardWindows.values()].filter(
+          (w) => !since || !seriesEndedBefore(w, since)
+        );
 
-        // Most cards re-render the innings table in place. A few navigate to the
-        // series page instead, and for those the player's innings are only
-        // reachable through that series' scorecards — skipping them loses whole
-        // tours (Buttler's England series, including a 131, went missing this way).
-        // Those are noted and read after this loop: following a navigation here
-        // leaves the card list re-rendered, so every later index would point at
-        // the wrong tournament.
-        if (!page.url().includes(`/player/${slug}`)) {
-          const seriesUrl = page.url();
-          if (/\/series\//.test(seriesUrl)) deferred.push({ seriesUrl, series });
-          continue;
-        }
-
-        // The table is split two ways at once: Batting/Bowling, and a format tab
-        // (ALL / T20 / ODI / Test / T10 / 100B). The default view shows only one
-        // format, so a player's Test innings — three Duleep Trophy knocks, in the
-        // case that exposed this — are invisible unless the Test tab is opened.
         for (const format of ['ALL', 'T20', 'ODI', 'Test', 'T10', '100B']) {
-          // Target the tab itself (div.statsType). A bare text match hits the
-          // series-card title "T20" first and silently never switches format.
-          const fmtTab = page.locator('.statsType', { hasText: new RegExp(`^${format}$`) }).first();
+          const fmtTab = page
+            .locator('.statsType', { hasText: new RegExp(`^${format}$`) })
+            .first();
           if (await fmtTab.count()) {
             await fmtTab.click({ timeout: 5000 }).catch(() => {});
             await page.waitForTimeout(1300);
@@ -270,28 +237,179 @@ export class CrexSource extends Source {
           }
 
           for (const r of await readTable(page)) {
-            const row = parseMatchRow({ ...r, series: seriesForDate(windows, r.date) ?? series });
+            const series = seriesForDate(windows, r.date);
+            const row = parseMatchRow({ ...r, series });
             if (!row) continue;
+            // Without a tournament the row cannot be placed or dated; drop it
+            // rather than attribute it to whatever was selected.
+            if (!row.competition) continue;
             const k = `${row.fixture}|${row.date}`;
-            // Batting and bowling arrive as separate rows for one innings; merge them.
+            // Batting and bowling arrive as separate rows for one innings.
             collected.set(k, { ...(collected.get(k) ?? {}), ...row });
           }
         }
       }
-      }
 
-      // Second pass: the series whose cards navigated away.
-      for (const { seriesUrl, series } of deferred) {
-        const side = await (await this.browser()).newPage({ userAgent: UA });
+      // The tab sweep above only shows whichever tournament the table opens on.
+      // The rest are reached by selecting each series in the left-hand list.
+      //
+      // The click target matters: the series *name* is a link and navigates to the
+      // series page, losing the table. The date line beneath it (.seriesDesc) is
+      // part of the card's own handler and swaps the panel in place, which is what
+      // a reader does by hand. Clicking the name is why The Hundred and the England
+      // tour kept coming back empty.
+      const windows = [...cardWindows.values()].filter(
+        (w) => !since || !seriesEndedBefore(w, since)
+      );
+
+      for (const w of windows) {
         try {
-          for (const row of await readSeriesInnings(side, seriesUrl, slug, series)) {
-            const k = `${row.fixture}|${row.date}`;
-            collected.set(k, { ...(collected.get(k) ?? {}), ...row });
+          // The format tabs are left on whichever one the sweep above finished on,
+          // which would filter the card's table down to that one format. Back to ALL.
+          const allTab = page.locator('.statsType', { hasText: /^ALL$/ }).first();
+          if (await allTab.count()) {
+            await allTab.click({ timeout: 5000 }).catch(() => {});
+            await page.waitForTimeout(1100);
+          }
+
+          // Selecting a card is done from the Batting view. The sweep above ends on
+          // Bowling, where a pure batsman has no series list at all — which is why
+          // every card lookup was coming back missing.
+          const batTab = page.locator('text="Batting"').first();
+          if (await batTab.count()) {
+            await batTab.click({ timeout: 5000 }).catch(() => {});
+            await page.waitForTimeout(1200);
+          }
+
+          const cards = page.locator('.seriesLeftCard');
+          const labels = await cards.evaluateAll((els) =>
+            els.map((e) => (e.textContent || '').replace(/\s+/g, ' ').trim())
+          );
+          const idx = labels.findIndex((l) => l.startsWith(w.name));
+          if (idx < 0) continue;
+
+          const desc = cards.nth(idx).locator('.seriesDesc').first();
+          if (!(await desc.count())) continue;
+
+          const snapshot = async () =>
+            (await page
+              .$$eval('tr.tableClr', (trs) =>
+                trs.map((tr) => (tr.textContent || '').replace(/\s+/g, ' ').trim()).join('|')
+              )
+              .catch(() => '')) ?? '';
+
+          // Park on a different card first, so selecting the target is always a real
+          // transition. Without this the wait below cannot tell "already showing this
+          // tournament" from "click ignored, still showing the previous one" — and the
+          // Sri Lanka card is the one Will Jacks's page opens on, so its rows sat in
+          // the table while every later card claimed them in turn.
+          if ((await cards.count()) > 1) {
+            const other = cards.nth(idx === 0 ? 1 : 0).locator('.seriesDesc').first();
+            if (await other.count()) {
+              await other.click({ timeout: 8000 }).catch(() => {});
+              await page.waitForTimeout(1600);
+            }
+          }
+
+          // Captured after parking, so it is the *other* card's table we compare against.
+          const before = await snapshot();
+
+          await desc.click({ timeout: 8000 });
+          await page.waitForTimeout(1900);
+
+          // Wait for the *table* to change before believing it belongs to this card.
+          //
+          // Watching the card's own selected state is not enough: CREX moves .sSelect
+          // the instant it is clicked while the innings table is still the previous
+          // tournament's, so every card in turn appeared to settle and each one stamped
+          // its name onto the same Sri Lanka rows. The last card processed won, which
+          // is how Will Jacks's England ODIs ended up filed under "County Div-One 2026"
+          // for Surrey. The county season runs Apr 3 - Sep 27 and overlaps the whole
+          // tour, so nothing downstream could have caught it by date.
+          //
+          // The table's own fingerprint is the honest signal, so wait for it to differ
+          // from the one before the click.
+          let settled = false;
+          for (let attempt = 0; attempt < 4; attempt++) {
+            if ((await snapshot()) !== before) {
+              settled = true;
+              break;
+            }
+            await page.waitForTimeout(1200);
+          }
+          // "Unchanged" is ambiguous on its own — the card may already have been the
+          // selected one, which is the normal case for whichever tournament the page
+          // opened on. Confirm against the card CREX marks as selected before giving
+          // up, so the opening tournament is not skipped.
+          if (!settled) {
+            const active =
+              (await page.locator('.seriesLeftCard.sSelect').first().textContent().catch(() => '')) ??
+              '';
+            settled = active.replace(/\s+/g, ' ').trim().startsWith(w.name);
+          }
+          if (!settled) continue;
+
+          // A stray navigation still means the panel is gone; go back and move on.
+          if (!page.url().includes(`/player/${slug}`)) {
+            await page.goto(`https://crex.com/player/${slug}/matches`, {
+              waitUntil: 'domcontentloaded',
+              timeout: 30000,
+            });
+            await page.waitForTimeout(1600);
+            continue;
+          }
+
+          // Both disciplines are read, because a card's batting and bowling tables are
+          // different lists and the sweep cannot place these rows: where two windows
+          // overlap — a county season running Apr 3 - Sep 27 across an England tour —
+          // it refuses to guess and drops them, so this walk is the only chance to see
+          // Jacks's 5/22 against Sri Lanka.
+          //
+          // The discipline tab re-renders the table back to the default tournament, so
+          // the card has to be selected again after switching. Skipping that is what
+          // filed those Sri Lanka innings under "County Div-One 2026".
+          for (const discipline of ['Batting', 'Bowling']) {
+            const dTab = page.locator(`text="${discipline}"`).first();
+            if (await dTab.count()) {
+              await dTab.click({ timeout: 5000 }).catch(() => {});
+              await page.waitForTimeout(1300);
+
+              // Re-select, and only trust the table once CREX marks this card active.
+              const again = page
+                .locator('.seriesLeftCard')
+                .filter({ hasText: w.name })
+                .first()
+                .locator('.seriesDesc')
+                .first();
+              if (!(await again.count())) continue;
+              await again.click({ timeout: 8000 }).catch(() => {});
+              await page.waitForTimeout(1600);
+
+              const active =
+                (await page
+                  .locator('.seriesLeftCard.sSelect')
+                  .first()
+                  .textContent()
+                  .catch(() => '')) ?? '';
+              if (!active.replace(/\s+/g, ' ').trim().startsWith(w.name)) continue;
+            }
+
+            for (const r of await readTable(page)) {
+              // The card that was just selected is what the panel is showing, so it
+              // names the tournament outright — no date lookup is wanted here.
+              //
+              // Deferring to `seriesForDate` was wrong for exactly the case it looks
+              // designed for: a county season runs Apr 3 - Sep 27 and therefore
+              // contains every touring date inside it, so Will Jacks's England ODIs
+              // against Sri Lanka came back as "County Div-One 2026", played for SUR.
+              const row = parseMatchRow({ ...r, series: w });
+              if (!row?.competition) continue;
+              const k = `${row.fixture}|${row.date}`;
+              collected.set(k, { ...(collected.get(k) ?? {}), ...row });
+            }
           }
         } catch {
-          // a failed series must not lose the rest of the player's record
-        } finally {
-          await side.close().catch(() => {});
+          // one unreadable card must not lose the player's other tournaments
         }
       }
 
@@ -299,8 +417,12 @@ export class CrexSource extends Source {
       this.writeCache(key, parsed);
       await page.close();
       return parsed;
-    } catch {
+    } catch (err) {
+      // A partial read is still worth keeping, but the reason must not vanish: a
+      // swallowed error here once let a run report "259 players, 0 failed" while 71
+      // of them — Riyan Parag, Archer, Rahane, Shreyas Iyer — came back empty.
       await page.close().catch(() => {});
+      if (!collected.size) throw err;
       return [...collected.values()];
     }
   }
@@ -309,109 +431,6 @@ export class CrexSource extends Source {
   async pause() {
     await new Promise((r) => setTimeout(r, this.delayMs));
   }
-}
-
-/**
- * A player's innings in a series whose card navigates rather than expanding.
- *
- * The series page lists its matches; each scorecard carries every player's figures,
- * so the player's own rows are picked out by his slug. Cells are read as direct TD
- * children only — querying `td, div` picks up nested wrappers and returns duplicated
- * names and partnership scores ("70-2") rather than innings figures.
- */
-async function readSeriesInnings(page, seriesUrl, slug, series, { maxMatches = 14 } = {}) {
-  const out = [];
-  let links = [];
-  try {
-    // The URL handed in is already the series' matches page, so appending
-    // "/matches" again yields ".../matches/matches", which 404s silently.
-    const base = seriesUrl.replace(/\/$/, '').replace(/\/matches$/, '');
-    await page.goto(`${base}/matches`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000,
-    });
-    await page.waitForTimeout(1600);
-    links = await page.$$eval('a[href*="cricket-live-score"]', (as) =>
-      [...new Set(as.map((a) => a.getAttribute('href')).filter(Boolean))]
-    );
-  } catch {
-    return out;
-  }
-
-  const window = links.slice(0, maxMatches);
-  for (let matchIndex = 0; matchIndex < window.length; matchIndex++) {
-    const link = window[matchIndex];
-    try {
-      await page.goto(`https://crex.com${link.replace(/\/$/, '')}/match-scorecard`, {
-        waitUntil: 'domcontentloaded',
-        timeout: 25000,
-      });
-      await page.waitForTimeout(1300);
-
-      const hit = await page.evaluate((want) => {
-        // A match still in progress has no settled scorecard, and its rows carry
-        // the wrong tournament context, so the whole page is skipped.
-        const state = document.body.innerText.slice(0, 400);
-        if (/\b(Live|Yet to bat|Innings Break|Match yet to begin|Starts in)\b/i.test(state)) {
-          return { rows: [], date: null, title: document.title, live: true };
-        }
-
-        const rows = [];
-        for (const tr of document.querySelectorAll('tr')) {
-          const a = tr.querySelector(`a[href^="/player/${want}"]`);
-          if (!a) continue;
-          const cells = [...tr.children]
-            .filter((c) => c.tagName === 'TD')
-            .map((c) => c.textContent.replace(/\s+/g, ' ').trim());
-          if (cells.length >= 4) rows.push(cells);
-        }
-        // The page carries the match date and the sides in plain text.
-        const text = document.body.innerText;
-        return {
-          rows,
-          date: text.match(/(\d{1,2}\s+[A-Z][a-z]{2}\s+\d{4})/)?.[1] ?? null,
-          title: document.title,
-        };
-      }, slug);
-
-      if (!hit.rows.length) continue;
-
-      // The title reads "England won by 4 wickets, England vs India 2nd-T20 Live
-      // match Score" — the result comes first, so the fixture is the later clause.
-      const fixture =
-        hit.title.match(/([A-Za-z ]+ vs [A-Za-z ]+ \d+(?:st|nd|rd|th)-\w+)/)?.[1]?.trim() ||
-        hit.title.split(/[,|]/).slice(1).join(',').trim().slice(0, 60) ||
-        'match';
-      const stage = hit.title.match(/(\d+(?:st|nd|rd|th))-(T20|ODI|Test)/i);
-      // CREX prints no date on these scorecards and /match-info is forbidden, so a
-      // row would otherwise be dropped for want of one. The series card does carry
-      // the window ("Aug 23 - Sep 10") and matches are listed in order, so the date
-      // is placed within it and flagged as approximate — losing a Duleep Trophy
-      // semi-final entirely is worse than dating it to the right week.
-      const printed = normaliseSeriesDate(hit.date);
-      const date = printed ?? spreadOverWindow(series, matchIndex, window.length);
-      const dateApprox = !printed;
-
-      for (const cells of hit.rows) {
-        const parsed = parseScorecardCells(cells);
-        if (!parsed) continue;
-        out.push({
-          fixture,
-          dateApprox,
-          date,
-          format: stage ? normaliseFormat(stage[2]) : 'Unknown',
-          competition: series?.name ?? null,
-          team: series?.playedFor ?? null,
-          opponent: null,
-          ...parsed,
-          source: 'crex',
-        });
-      }
-    } catch {
-      // one unreadable scorecard should not end the series
-    }
-  }
-  return out;
 }
 
 /**
@@ -434,33 +453,6 @@ export function seriesEndedBefore(series, cutoff) {
 
   const end = `${year}-${String(mi + 1).padStart(2, '0')}-${String(+m[2]).padStart(2, '0')}`;
   return end < cutoff;
-}
-
-/**
- * Place match `i` of `n` inside a series window. Used only when CREX publishes no
- * date for a scorecard; the row is flagged `dateApprox` so nothing downstream
- * treats it as exact.
- */
-function spreadOverWindow(series, i, n) {
-  if (!series?.from || !series?.to || !n) return null;
-  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const parse = (x) => {
-    const m = String(x).match(/^([A-Z][a-z]{2})\s+(\d{1,2})$/);
-    if (!m) return null;
-    const mi = MON.indexOf(m[1]);
-    return mi < 0 ? null : { mi, d: +m[2] };
-  };
-  const a = parse(series.from);
-  const b = parse(series.to);
-  const year = String(series.name ?? '').match(/(20\d{2})/)?.[1];
-  if (!a || !b || !year) return null;
-
-  const start = Date.UTC(+year, a.mi, a.d);
-  const end = Date.UTC(+year, b.mi, b.d);
-  if (end < start) return null;
-  const at = start + ((end - start) * (n === 1 ? 0 : i / (n - 1)));
-  const d = new Date(at);
-  return `${d.getUTCDate()} ${MON[d.getUTCMonth()]}`;
 }
 
 /**
@@ -490,32 +482,6 @@ function seriesForDate(windows, dayMonth) {
   // Only when exactly one tournament was running; overlapping windows stay with
   // the card that produced the row.
   return hits.length === 1 ? hits[0] : null;
-}
-
-/** "11 Jul 2026" -> "11 Jul", matching the shape the player table returns. */
-function normaliseSeriesDate(s) {
-  if (!s) return null;
-  const m = String(s).match(/^(\d{1,2})\s+([A-Z][a-z]{2})/);
-  return m ? `${+m[1]} ${m[2]}` : null;
-}
-
-/**
- * Batting: [name + how out, runs, balls, 4s, 6s, SR]
- * Bowling: [name, overs, maidens, runs, wickets, econ]
- * The second cell tells them apart: an overs figure carries a decimal.
- */
-export function parseScorecardCells(cells) {
-  if (!Array.isArray(cells) || cells.length < 5) return null;
-  const [who, a, b, c, d] = cells.map((x) => String(x ?? '').trim());
-
-  if (/^\d+\.\d$/.test(a)) {
-    if (!/^\d+$/.test(c) || !/^\d+$/.test(d)) return null;
-    const [o, rem] = a.split('.');
-    return { bowling: { overs: a, balls: +o * 6 + +rem, runs: +c, wickets: +d } };
-  }
-
-  if (!/^\d+$/.test(a) || !/^\d+$/.test(b)) return null;
-  return { batting: { runs: +a, balls: +b, out: !/NOT OUT/i.test(who) } };
 }
 
 /**
@@ -556,10 +522,16 @@ export function parseSeriesCard(label) {
   // Anchor on the date *window* ("Apr 3 - Sep 27"), not on the first month-like
   // word: a tournament called "County Div-Two 2026" contains "Two 2026", which
   // looks like a month and a day, and truncates the name to "County Div-".
-  const name =
+  const raw =
     label.match(/^(.+?)(?=[A-Z][a-z]{2}\s+\d{1,2}\s*-\s*[A-Z][a-z]{2}\s+\d{1,2})/)?.[1]?.trim() ??
     label.match(/^(.+?)(?=[A-Z][a-z]{2}\s\d)/)?.[1]?.trim() ??
     label.slice(0, 40).trim();
+
+  // A card that renders its dates but not its title leaves the window itself as the
+  // "name" — "Mar 22 -". That is not a tournament, and a row carrying it would be
+  // filed under a competition no one can recognise, so report no name and let the
+  // caller drop the row instead.
+  const name = /^[A-Z][a-z]{2}\s+\d{1,2}\s*-?\s*$/.test(raw) || !raw ? null : raw;
   const played = label.match(/Played for\s+([A-Z]{2,4})/)?.[1] ?? null;
   const span = label.match(/([A-Z][a-z]{2}\s\d{1,2})\s*-\s*([A-Z][a-z]{2}\s\d{1,2})/);
   return { name, playedFor: played, from: span?.[1] ?? null, to: span?.[2] ?? null };

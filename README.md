@@ -4,9 +4,10 @@ Tracks every player on an IPL 2026 roster across every competition they appear i
 worldwide — internationals, the Big Bash, bilateral tours, qualifiers — so a fan can
 follow one player without following twenty tournaments.
 
-**Live page:** https://claude.ai/artifact/AVQFDctVu746TjC1Dr4jsZ
+**Live page:** https://claude.ai/artifact/9HKRwVDbnBahcwECPocBii
 
-Current data: 260 players, 2,643 innings, 17 competitions, through 17 Sep 2026.
+Current data: 256 players, 2,363 innings, 58 competitions, 1 Jun - 28 Sep 2026.
+All of it scraped from CREX, which is the single source.
 
 ## The actual problem
 
@@ -73,16 +74,58 @@ data/
   cache/cricsheet/      downloaded match archives
 ```
 
-## Rebuilding
+## Running it
 
 ```bash
-node --test src/core/registry.test.js   # identity tests
-node src/build-index.js                 # regenerate site/data/*.json (~3s)
-cd site && python3 -m http.server 8777  # serve locally
+npm install
+npx playwright install chromium
+
+npm run scrape     # read every pinned player's CREX page   (~90 min cold, seconds warm)
+npm run fixtures   # the next two days, with squads         (~2 min)
+npm run build      # site/data/*.json, then offseason-live.html
+npm run refresh    # all three, in order
 ```
 
-To refresh match data, delete `data/cache/cricsheet/<slug>/` and call
-`CricsheetSource.sync(slug)`, or `sync(slug, { force: true })`.
+`npm run scrape` is incremental. A player page read within `CACHE_HOURS` (default 24)
+is taken from `data/cache/crex` rather than fetched again, so a cold run costs about
+ninety minutes and a same-day re-run costs seconds. Delete the cache to force a full
+re-read.
+
+Environment:
+
+| variable | default | meaning |
+| --- | --- | --- |
+| `SEASON_START` | `2026-06-01` | first day the tracker covers; everything earlier is dropped |
+| `CACHE_HOURS` | `24` | how long a scraped player page stays usable |
+| `SCRAPE_CONCURRENCY` | `2` | player pages read at once |
+
+Concurrency is deliberately low. At four, pages timed out often enough that seventy
+players silently lost every innings in one run — and because a failed fetch returned
+an empty list instead of throwing, the run still reported `0 failed`. Both halves of
+that are fixed, but two remains the setting that finishes intact.
+
+To serve the built page locally: `cd site && python3 -m http.server 8777`.
+
+## Deploying
+
+`.github/workflows/refresh.yml` runs the whole pipeline daily at 03:30 UTC (09:00 IST)
+and publishes to GitHub Pages. It is free: public repositories get unlimited Actions
+minutes, and the job finishes well inside the six-hour cap.
+
+One-time setup, after pushing the repository to GitHub:
+
+1. **Settings → Pages → Source: GitHub Actions.**
+2. **Settings → Actions → General → Workflow permissions: Read and write**, so the
+   job can commit the refreshed data back.
+3. Optionally **Settings → Variables → Actions** → `SEASON_START`, to move the cutoff
+   without editing the workflow.
+
+Then **Actions → refresh → Run workflow** to confirm it works rather than waiting a day.
+
+The scrape cache is carried between runs by `actions/cache`, keyed by run id with a
+`crex-cache-` prefix fallback, so each day restores the previous day's cache and only
+refetches what has gone stale. The cache is ignored by git — it is 1.4 GB locally and
+never belongs in the repository.
 
 ## Data sources, and what was rejected
 

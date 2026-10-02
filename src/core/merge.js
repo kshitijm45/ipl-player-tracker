@@ -14,8 +14,9 @@
  * Two things are still done, because they concern which rows exist rather than what
  * they say:
  *   - a match still in progress is dropped; its figures are partial
- *   - where the same fixture arrives under different tournament names — a card that
- *     did not re-render cleanly — the name most players agree on wins
+ *   - a row whose fixture names an opponent its own competition never mentions is
+ *     dropped as self-inconsistent, rather than being relabelled into something the
+ *     page did not say
  */
 
 /** Same innings? Same player, same day, same format. */
@@ -65,28 +66,21 @@ export function mergePerformances({ crexRows = [], cricsheetRows = [], today, fr
     });
   }
 
-  // A card click that does not re-render cleanly leaves the previous tournament's
-  // innings on screen while the walk has moved on, so one match can arrive under
-  // two or three competitions depending on whose page it came from. It is the same
-  // event, so the name most players agree on wins.
-  const votes = new Map();
-  for (const r of merged.values()) {
-    if (!r.date || !r.fixture || !r.competition) continue;
-    const k = `${r.date}|${r.fixture}`;
-    if (!votes.has(k)) votes.set(k, new Map());
-    const tally = votes.get(k);
-    tally.set(r.competition, (tally.get(r.competition) ?? 0) + 1);
-  }
-  for (const r of merged.values()) {
-    if (!r.date || !r.fixture) continue;
-    const tally = votes.get(`${r.date}|${r.fixture}`);
-    if (!tally || tally.size < 2) continue;
-    const winner = [...tally].sort((a, b) => b[1] - a[1])[0][0];
-    if (winner !== r.competition) {
-      r.competition = winner;
-      r.competitionCorrected = true;
-    }
-  }
+  // Nothing here second-guesses which tournament a row belongs to.
+  //
+  // Earlier versions did: a majority vote across players rewrote a competition when
+  // the same date and fixture string turned up under two names, and a companion rule
+  // moved multi-innings rows by date. Both were repairs for the old scrape, which read
+  // a stale panel after a card click and stamped the wrong label onto real rows.
+  //
+  // The card walk reads each row under the series card it belongs to, so the label is
+  // CREX's own. The vote is now actively harmful, because fixture strings are generic:
+  // "1st Test, 2nd Inn" on 25 June belongs to IND-A vs SL-A for one player and SL vs
+  // WI for another, and whichever name had more players would have swallowed the other,
+  // crediting a player with an appearance in a tournament he never played.
+  //
+  // `contradicts` below stays: it only drops a row whose own fixture names an opponent
+  // its competition never mentions, which is a self-inconsistent row rather than a guess.
 
   // A card click that has not re-rendered yet leaves the previous tournament's
   // innings on screen, and the walk stamps the new card's label onto them. Where
@@ -101,43 +95,6 @@ export function mergePerformances({ crexRows = [], cricsheetRows = [], today, fr
     if (codes.length < 2) return false;
     return !codes.some((c) => c.toUpperCase() === opponent.toUpperCase());
   };
-
-  // A multi-innings fixture ("2nd-Semi-Final Test, 1st Inn") names no opponent, so
-  // the check above cannot see it is mislabelled. Those are resolved by date: if
-  // another competition ran the same fixture on the same day and far more players
-  // agree on it, the row belongs there. This is how a Duleep Trophy semi-final
-  // filed under a Japan tour finds its way home.
-  const byDayFixture = new Map();
-  for (const r of merged.values()) {
-    if (!r.date || !r.fixture || !r.competition) continue;
-    const k = `${r.date}|${r.fixture}`;
-    if (!byDayFixture.has(k)) byDayFixture.set(k, new Map());
-    const t = byDayFixture.get(k);
-    t.set(r.competition, (t.get(r.competition) ?? 0) + 1);
-  }
-  const dayTotals = new Map();
-  for (const r of merged.values()) {
-    if (!r.date || !r.competition) continue;
-    const k = `${r.date}|${r.competition}`;
-    dayTotals.set(k, (dayTotals.get(k) ?? 0) + 1);
-  }
-  for (const r of merged.values()) {
-    if (!r.date || !r.fixture) continue;
-    // Only fixtures with no opponent clause; the rest are handled above.
-    if (/\bvs\b/i.test(r.fixture)) continue;
-    const mine = dayTotals.get(`${r.date}|${r.competition}`) ?? 0;
-    if (mine > 2) continue; // well attested, leave it alone
-
-    let best = null;
-    for (const [comp, count] of byDayFixture.get(`${r.date}|${r.fixture}`) ?? []) {
-      if (comp === r.competition) continue;
-      if (!best || count > best[1]) best = [comp, count];
-    }
-    if (best && best[1] > mine) {
-      r.competition = best[0];
-      r.competitionCorrected = true;
-    }
-  }
 
   const rows = [...merged.values()]
     .filter((r) => !contradicts(r))

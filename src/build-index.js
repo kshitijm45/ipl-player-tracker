@@ -136,17 +136,34 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
   // failed to resolve. Same name, same franchise means the same person, so drop the
   // empty copy rather than showing him twice with 0 innings.
   const resolvedByName = new Map();
+  // The CREX slug is the stronger signal, and the one that catches the cases the
+  // name comparison cannot: the register knows "SR Dubey" while the squad sheet and
+  // CREX both say "Saurabh Dubey", so the name key never matches and the same man is
+  // listed twice — once with his innings and once empty.
+  const resolvedBySlug = new Map();
   for (const t of tracked.values()) {
     if (!t.id) continue;
     const reg = registry.get(t.id);
     for (const n of [reg?.unique_name, t.listedAs].filter(Boolean)) {
       resolvedByName.set(`${String(n).toLowerCase()}|${t.teams?.[0] ?? ''}`, t);
     }
+    const slug = crexPins[t.id]?.slug;
+    if (slug) resolvedBySlug.set(slug, t);
   }
+  // Dropping the duplicate record is only half the job: his innings were scraped
+  // under the name key, so they have to follow him to the record that survives or
+  // they become orphans that no player page can reach.
+  const mergedInto = new Map();
   for (const [key, t] of [...tracked]) {
     if (t.id || !t.unmapped) continue;
-    const match = resolvedByName.get(`${String(t.name).toLowerCase()}|${t.teams?.[0] ?? ''}`);
-    if (match) tracked.delete(key);
+    const bySlug = crexSlugPins[t.name]?.slug;
+    const match =
+      (bySlug && resolvedBySlug.get(bySlug)) ||
+      resolvedByName.get(`${String(t.name).toLowerCase()}|${t.teams?.[0] ?? ''}`);
+    if (match) {
+      mergedInto.set(`unmapped:${t.name}`, match.id);
+      tracked.delete(key);
+    }
   }
 
   const trackedIds = new Set([...tracked.values()].map((t) => t.id).filter(Boolean));
@@ -165,7 +182,8 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
     for (const [name, pin] of Object.entries(crexSlugPins)) slugOwner.set(pin.slug, name);
 
     for (const [playerId, rows] of Object.entries(raw)) {
-      if (!trackedIds.has(playerId) && !slugOwner.has(playerId)) continue;
+      const asName = slugOwner.has(playerId) ? `unmapped:${slugOwner.get(playerId)}` : playerId;
+      if (!trackedIds.has(playerId) && !slugOwner.has(playerId) && !mergedInto.has(asName)) continue;
       for (const r of rows) {
         // Only rows whose date resolved to a real day are usable.
         if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date ?? '')) continue;
@@ -174,7 +192,10 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
         // slug while his record is keyed "unmapped:<name>". Rewrite the key so the
         // two actually join — otherwise the innings are scraped and then dropped.
         const owner = slugOwner.get(playerId);
-        crexRows.push({ ...r, playerId: owner ? `unmapped:${owner}` : playerId });
+        const named = owner ? `unmapped:${owner}` : playerId;
+        // And if that name-keyed record was folded into a resolved one just above,
+        // send the rows to the id that survived.
+        crexRows.push({ ...r, playerId: mergedInto.get(named) ?? named });
       }
     }
   }
@@ -191,8 +212,16 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
     const registerName = reg?.unique_name ?? t.name;
     const crex = (t.id ? crexPins[t.id] : null) ?? crexSlugPins[t.name] ?? null;
 
-    players.set(t.id ?? `unmapped:${t.name}`, {
-      id: t.id ?? null,
+    // A player CREX has but Cricsheet does not gets an id built from his name. It
+    // has to be the *same* string the map is keyed by and that his rows carry, or
+    // the join silently fails: his innings are scraped and built, and his page shows
+    // nothing. That is what hid Macneil Noronha's ten Maharaja T20 innings and
+    // Vishal Nishad's six in the UP T20 — the rows existed all along under
+    // "unmapped:<name>" while the record's id was null.
+    const playerKey = t.id ?? `unmapped:${t.name}`;
+
+    players.set(playerKey, {
+      id: playerKey,
       // What the page shows: the common name, falling back to the register name.
       name: stripDisambiguator(
         trustedCrex[registerName] ??

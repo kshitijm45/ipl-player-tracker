@@ -1,0 +1,107 @@
+# Daily refresh: scrape CREX, rebuild the index, publish the page.
+#
+# Runs on GitHub's free tier. Public repositories get unlimited Actions minutes, so
+# the only real limits are the 6-hour job cap (a full scrape takes about 90 minutes)
+# and the 10 GB cache allowance, which the CREX cache sits well inside.
+#
+# The scrape is incremental. `data/cache/crex` is restored before the run and saved
+# after it, so a player whose page was read within `CACHE_HOURS` is not fetched again
+# and a daily run only picks up what has changed. The cache key carries the run id so
+# each day writes a new entry, and `restore-keys` falls back to the most recent one.
+
+name: refresh
+
+on:
+  schedule:
+    # 03:30 UTC = 09:00 IST, after the previous day's play has been scored.
+    - cron: '30 3 * * *'
+  # So a refresh can be triggered by hand without waiting for the schedule.
+  workflow_dispatch:
+
+# One refresh at a time: two runs would race on the same commit.
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Install Chromium
+        # Only the one browser, with the system libraries Playwright needs.
+        run: npx playwright install --with-deps chromium
+
+      - name: Restore CREX cache
+        uses: actions/cache@v4
+        with:
+          path: data/cache/crex
+          key: crex-cache-${{ github.run_id }}
+          restore-keys: |
+            crex-cache-
+
+      - name: Scrape players
+        env:
+          SEASON_START: ${{ vars.SEASON_START || '2026-06-01' }}
+          # A page read within this window is taken from cache, so the daily run
+          # refetches only what has gone stale.
+          CACHE_HOURS: '20'
+        run: npm run scrape
+
+      - name: Scrape fixtures
+        # Fixtures are always refetched: the whole point is what is on today.
+        run: npm run fixtures
+
+      - name: Build the site
+        env:
+          SEASON_START: ${{ vars.SEASON_START || '2026-06-01' }}
+        run: npm run build
+
+      - name: Commit the refreshed data
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A data site
+          if git diff --cached --quiet; then
+            echo "nothing changed today"
+          else
+            git commit -m "Refresh: $(date -u +'%Y-%m-%d')"
+            git push
+          fi
+
+      - name: Prepare the page
+        # Pages serves a directory, so the built file becomes its index.
+        run: |
+          mkdir -p _site
+          cp site/offseason-live.html _site/index.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: refresh
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
