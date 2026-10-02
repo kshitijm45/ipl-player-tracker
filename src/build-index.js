@@ -13,7 +13,6 @@
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { CricsheetSource, COMPETITIONS } from './sources/cricsheet.js';
 import { PlayerRegistry } from './core/registry.js';
 import { loadSquadFile, resolveSquads, classifySquad } from './core/squads.js';
 import { displayName, stripDisambiguator } from './core/display-name.js';
@@ -23,7 +22,7 @@ import { existsSync, readFileSync } from 'node:fs';
 const CREX_PATH = new URL('../data/crex-players.json', import.meta.url).pathname;
 const crexFile = existsSync(CREX_PATH) ? JSON.parse(readFileSync(CREX_PATH, 'utf8')) : {};
 const crexPins = crexFile.pins ?? {};
-// Players with no Cricsheet register entry are keyed by name instead, with the
+// Players with no register entry are keyed by name instead, with the
 // CREX slug standing in as their identity. Without this they can never be tracked,
 // because the pinning step has no id to hang them on.
 const crexSlugPins = crexFile.slugPins ?? {};
@@ -33,6 +32,7 @@ const CHANGES_PATH = new URL('../data/squad-changes-2026.json', import.meta.url)
 const squadChanges = existsSync(CHANGES_PATH) ? JSON.parse(readFileSync(CHANGES_PATH, 'utf8')) : { changes: [] };
 // Verified CREX spellings the automatic name guard cannot confirm on its own.
 const OVERRIDE_FILE = new URL('../data/player-overrides.json', import.meta.url).pathname;
+const IPL_APPEARANCES_PATH = new URL('../data/ipl-appearances-2026.json', import.meta.url).pathname;
 const trustedCrex = existsSync(OVERRIDE_FILE)
   ? JSON.parse(readFileSync(OVERRIDE_FILE, 'utf8')).trustedCrexNames ?? {}
   : {};
@@ -49,18 +49,24 @@ const DEPRIORITISED = /Qualifier|Sub Regional|Continental Cup|European Cup|Asian
 
 export async function buildIndex({ from = SEASON_START, slugs } = {}) {
   const registry = PlayerRegistry.load();
-  const source = new CricsheetSource();
 
-  // Who actually turned out in the IPL this season? Used both to scope the tracked
-  // set and as a disambiguation prior when resolving squad-list names.
+  // Who is on a franchise's books, and which franchise.
   //
-  // This reads the IPL season itself, not the post-IPL window the rest of the build
-  // uses: the squad is defined by who played in the IPL, while the performances are
-  // what those players did afterwards. Sharing one cutoff would empty the roster.
-  const { performances: iplPerfs } = await source.fetchPerformances({
-    from: IPL_SEASON_START,
-    slugs: ['ipl'],
-  });
+  // This used to be answered by reading the Cricsheet IPL season out of a 1.4 GB
+  // ball-by-ball cache. That cache is not committed, so the daily CI job had no IPL
+  // season to read and silently lost every player who reached the roster through an
+  // appearance rather than through the published squad list — the deployed page showed
+  // seventeen Chennai players instead of twenty-nine.
+  //
+  // The franchise now lives on the pin itself, in data/crex-players.json, which is
+  // CREX-keyed and committed. Twenty-eight tracked players are not in the squad file
+  // at all — Suryakumar Yadav, Tilak Varma, Mohammed Shami, Philip Salt among them —
+  // so the pin is the only place that knows where they play, and CREX is once again
+  // the single source the rest of the project already treats it as.
+  const iplPerfs = [];
+  for (const [id, pin] of Object.entries(crexPins)) {
+    if (pin?.franchise) iplPerfs.push({ playerId: id, team: pin.franchise });
+  }
   const appearedIds = new Set(iplPerfs.map((p) => p.playerId));
 
   const { members: squadMembers, unresolved } = resolveSquads({
@@ -168,9 +174,9 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
 
   const trackedIds = new Set([...tracked.values()].map((t) => t.id).filter(Boolean));
 
-  // CREX is the only source of match data. Cricsheet is still read above to work
-  // out who is in a squad, because its register is what gives each player a stable
-  // identity — but no innings come from it.
+  // CREX is the only source of match data, and now of the roster too. The register
+  // read at the top is a static name list, not a data feed: it turns "MD Shanaka"
+  // into the spelling a reader recognises. No innings and no squad come from it.
   const quarantined = [];
   const cricsheetRows = [];
 
@@ -188,7 +194,7 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
         // Only rows whose date resolved to a real day are usable.
         if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date ?? '')) continue;
         if (r.date < from) continue;
-        // A slug-pinned player has no Cricsheet id, so his rows arrive keyed by
+        // A slug-pinned player has no register id, so his rows arrive keyed by
         // slug while his record is keyed "unmapped:<name>". Rewrite the key so the
         // two actually join — otherwise the innings are scraped and then dropped.
         const owner = slugOwner.get(playerId);
@@ -212,7 +218,7 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
     const registerName = reg?.unique_name ?? t.name;
     const crex = (t.id ? crexPins[t.id] : null) ?? crexSlugPins[t.name] ?? null;
 
-    // A player CREX has but Cricsheet does not gets an id built from his name. It
+    // A player with no register entry gets an id built from his name. It
     // has to be the *same* string the map is keyed by and that his rows carry, or
     // the join silently fails: his innings are scraped and built, and his page shows
     // nothing. That is what hid Macneil Noronha's ten Maharaja T20 innings and
