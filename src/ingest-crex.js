@@ -147,10 +147,11 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
   }
 
   await Promise.all(Array.from({ length: concurrency }, (_, i) => worker(i)));
-  await source.close();
 
-  // Retry the failures once: most are transient timeouts, and a silent skip is
-  // worse than a slow run.
+  // The retries below call fetchMatches again, which reopens the browser. Closing it
+  // here and never again left that second browser running, which kept the process
+  // alive after the summary was printed. The single close now happens after the
+  // retries, when the scrape is genuinely finished.
   if (failures.length) {
     console.log(`\n  retrying ${failures.length} failures`);
     for (const f of failures.splice(0)) {
@@ -170,6 +171,8 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
       }
     }
   }
+
+  await source.close();
 
   flush(results);
   const total = Object.values(results).reduce((n, r) => n + r.length, 0);

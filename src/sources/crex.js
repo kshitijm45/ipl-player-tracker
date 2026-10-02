@@ -84,10 +84,25 @@ export class CrexSource extends Source {
     const b = this._browser;
     this._browser = null;
     if (!b) return;
-    await Promise.race([
-      b.close().catch(() => {}),
-      new Promise((r) => setTimeout(r, 8000)),
+
+    // A graceful close is tried first, but it cannot be the last word: Chromium
+    // sometimes declines to exit after a long run of page opens, and simply giving up
+    // waiting leaves the process alive. Node then keeps running with an open child
+    // handle, so the scrape prints its summary and hangs forever — harmless at a
+    // terminal where it can be killed, fatal in CI where the step sits until the job
+    // times out. If the close does not land, the process is killed outright.
+    const closed = await Promise.race([
+      b.close().then(() => true).catch(() => true),
+      new Promise((r) => setTimeout(() => r(false), 8000)),
     ]);
+    if (closed) return;
+
+    try {
+      // Playwright keeps the browser's own process handle; SIGKILL it directly.
+      b.process()?.kill('SIGKILL');
+    } catch {
+      // Nothing further can be done, and the caller's work is already saved.
+    }
   }
 
   cachePath(key) {
