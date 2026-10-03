@@ -13,9 +13,16 @@ name: refresh
 
 on:
   schedule:
-    # 18:30 UTC = 00:00 IST the following day, since IST is UTC+5:30. India does not
-    # observe DST, so this stays midnight year-round rather than drifting twice a year.
-    - cron: '30 18 * * *'
+    # 18:37 UTC = 00:07 IST the following day, since IST is UTC+5:30. India does not
+    # observe DST, so this stays just after midnight year-round rather than drifting
+    # twice a year.
+    #
+    # :37 rather than :30 on purpose. GitHub runs scheduled workflows from a shared
+    # queue and drops or badly delays them when it is contended, and the top and half
+    # of the hour are when everyone's crons land. An odd minute is materially more
+    # likely to fire on time. Seven minutes past midnight is still "midnight IST" for
+    # a daily tracker's purposes.
+    - cron: '37 18 * * *'
   # So a refresh can be triggered by hand without waiting for the schedule.
   workflow_dispatch:
     inputs:
@@ -29,8 +36,17 @@ on:
         default: false
 
 # One refresh at a time: two runs would race on the same commit.
+#
+# Keyed by trigger, not a single fixed group. With one group, a manual run already in
+# the queue makes GitHub discard the scheduled run that lands while it is there —
+# which is what happened on 3 October, when a dispatch at 18:32 UTC swallowed the
+# 18:30 cron. Separating them means a hand-triggered refresh can no longer cost the
+# repository its daily one.
+#
+# Two refreshes overlapping is handled where it actually matters: the commit step
+# rebases onto whatever main has become and retries, so neither run loses its work.
 concurrency:
-  group: refresh
+  group: refresh-${{ github.event_name }}
   cancel-in-progress: false
 
 permissions:
