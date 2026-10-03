@@ -1655,7 +1655,13 @@ function figure(r) {
   const bat = b && b.balls
     ? `<span class="runs ${b.runs >= 50 ? 'big' : b.runs === 0 ? 'nil' : ''}">${b.runs}${b.out ? '' : '*'}<span class="balls"> (${b.balls})</span></span>`
     : '';
-  const bowl = w && (w.balls || w.wickets)
+  // A spell counts as bowled if any of its numbers are present, including a wicketless
+  // one. The test was `w.balls || w.wickets`, and CREX gives neither for a bowler who
+  // took nothing: no ball count is scraped at all, so Manav Suthar's 0-32 in the Irani
+  // Cup Test was in the data and silently absent from the page. Conceding runs is
+  // bowling, and an economical wicketless spell is a performance.
+  const bowled = w && (w.balls || w.wickets || w.runs != null || w.overs);
+  const bowl = bowled
     ? `<span class="bowl ${w.wickets >= 3 ? 'haul' : ''}">${w.overs ? `${w.overs}–${w.runs}–${w.wickets}` : `${w.wickets}/${w.runs}`}</span>`
     : '';
   // An innings dated by this project rather than by CREX's start-date stamp. The
