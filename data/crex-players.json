@@ -1429,6 +1429,84 @@
       "code": "BZD",
       "displayName": "Vihaan Malhotra",
       "franchise": "Royal Challengers Bengaluru"
+    },
+    "9eb1455b": {
+      "slug": "nathan-ellis-3QW",
+      "code": "3QW",
+      "displayName": "Nathan Ellis",
+      "franchise": "Chennai Super Kings"
+    },
+    "5f26f677": {
+      "slug": "ben-duckett-ZZ",
+      "code": "ZZ",
+      "displayName": "Ben Duckett",
+      "franchise": "Delhi Capitals"
+    },
+    "e94915e6": {
+      "slug": "sam-curran-CG",
+      "code": "CG",
+      "displayName": "Sam Curran",
+      "franchise": "Rajasthan Royals"
+    },
+    "0a67aec0": {
+      "slug": "akash-deep-5KW",
+      "code": "5KW",
+      "displayName": "Akash Deep",
+      "franchise": "Kolkata Knight Riders"
+    },
+    "77b1aa15": {
+      "slug": "harshit-rana-8OH",
+      "code": "8OH",
+      "displayName": "Harshit Rana",
+      "franchise": "Kolkata Knight Riders"
+    },
+    "0a8fce53": {
+      "slug": "mustafizur-rahman-B3",
+      "code": "B3",
+      "displayName": "Mustafizur Rahman",
+      "franchise": "Kolkata Knight Riders"
+    },
+    "25f7b7d6": {
+      "slug": "tom-banton-1DM",
+      "code": "1DM",
+      "displayName": "Tom Banton",
+      "franchise": "Gujarat Titans"
+    },
+    "d621b427": {
+      "slug": "musheer-ahmed-khan-8U6",
+      "code": "8U6",
+      "displayName": "Musheer Khan",
+      "franchise": "Punjab Kings"
+    },
+    "983f2f61": {
+      "slug": "swapnil-singh-CT",
+      "code": "CT",
+      "displayName": "Swapnil Singh",
+      "franchise": "Royal Challengers Bengaluru"
+    },
+    "d6cd318e": {
+      "slug": "atharva-ankolekar-175",
+      "code": "175",
+      "displayName": "Atharva Ankolekar",
+      "franchise": "Mumbai Indians"
+    },
+    "cad40f5e": {
+      "slug": "brydon-carse-1IF",
+      "code": "1IF",
+      "displayName": "Brydon Carse",
+      "franchise": "Sunrisers Hyderabad"
+    },
+    "c38d3503": {
+      "slug": "shivam-mavi-DH",
+      "code": "DH",
+      "displayName": "Shivam Mavi",
+      "franchise": "Sunrisers Hyderabad"
+    },
+    "e3e9f70a": {
+      "slug": "amit-kumar-MB3",
+      "code": "MB3",
+      "displayName": "Amit Kumar",
+      "franchise": "Sunrisers Hyderabad"
     }
   },
   "bySlug": {
@@ -2931,6 +3009,36 @@
       "code": "DSI",
       "displayName": "Mangesh Yadav",
       "franchise": "Royal Challengers Bengaluru"
+    },
+    "Wanindu Hasaranga": {
+      "slug": "wanindu-hasaranga-10N",
+      "code": "10N",
+      "displayName": "Wanindu Hasaranga",
+      "franchise": "Lucknow Super Giants"
+    },
+    "Richard Gleeson": {
+      "slug": "richard-gleeson-1JM",
+      "code": "1JM",
+      "displayName": "Richard Gleeson",
+      "franchise": "Royal Challengers Bengaluru"
+    },
+    "Jack Edwards": {
+      "slug": "jack-edwards-221",
+      "code": "221",
+      "displayName": "Jack Edwards",
+      "franchise": "Sunrisers Hyderabad"
+    },
+    "Yarra Prithviraj": {
+      "slug": "yarra-prithviraj-2WP",
+      "code": "2WP",
+      "displayName": "Yarra Prithviraj",
+      "franchise": "Gujarat Titans"
+    },
+    "Kuldip Yadav": {
+      "slug": "kuldip-yadav-66N",
+      "code": "66N",
+      "displayName": "Kuldip Yadav",
+      "franchise": "Chennai Super Kings"
     }
   }
 }
