@@ -15,6 +15,9 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { CrexSource } from './sources/crex.js';
+import { isMultiDay, resolveDay, stillCapturable } from './sources/crex-match-day.js';
+import { hasFeed, inningsDays } from './sources/crex-commentary.js';
+import { loadStore, saveStore, observe } from './core/match-days.js';
 
 const CREX_PATH = new URL('../data/crex-players.json', import.meta.url).pathname;
 const OUT_PATH = new URL('../data/crex-performances.json', import.meta.url).pathname;
@@ -172,16 +175,180 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
     }
   }
 
+  // Multi-day attribution runs after the player sweep, once every innings is known.
+  const multi = await recordMatchDays(source, results);
+
   await source.close();
 
   flush(results);
   const total = Object.values(results).reduce((n, r) => n + r.length, 0);
   console.log(`\n  ${done} players, ${total} innings, ${failed} failed`);
+  if (multi.matches) {
+    console.log(
+      `  multi-day: ${multi.observed} innings dated across ${multi.matches} matches ` +
+        `(${multi.live} in progress, ${multi.commentaryDated} settled by commentary` +
+        `${multi.noFeed ? `, ${multi.noFeed} with no feed` : ''})` +
+        (multi.unrecoverable
+          ? `\n  ${multi.unrecoverable} innings could not be dated and keep the match start date`
+          : '')
+    );
+  }
   if (failures.length) {
     console.log('  still failing:');
     for (const f of failures) console.log(`    ${f.slug} — ${f.error}`);
   }
   return { players: done, innings: total, failed, failures };
+}
+
+/**
+ * Date every multi-day innings that can still be dated, and record it.
+ *
+ * Runs once per scrape, after the player sweep. For each Test match a tracked player
+ * appeared in, the match page is read for its day of play, and every innings in that
+ * match is snapshotted against that day. Differencing consecutive snapshots at build
+ * time is what turns "145 on the 23rd" into "+75 on the 25th".
+ *
+ * Three things keep this cheap. Matches are fetched once each, not once per player —
+ * twelve players in one Test is one request. The fetch is plain HTTP, because the day
+ * marker is server-rendered. And a match CREX has marked finished is never re-read:
+ * its cache entry is permanent, since nothing about it can change again.
+ *
+ * What it cannot do is recover a match that finished before this ran for the first
+ * time. CREX removes the day marker when a match ends, so those innings have no day
+ * to find and keep the match's start date — counted as `unrecoverable` so the number
+ * is visible rather than silent.
+ */
+async function recordMatchDays(source, byPlayer) {
+  const store = loadStore();
+  if (store.corrupt) {
+    console.warn(
+      '\n  warning: data/crex-match-days.json could not be parsed and is being ' +
+        'rebuilt empty. Day-by-day history for matches already finished is lost.'
+    );
+  }
+
+  // Group every multi-day innings by the match it belongs to.
+  const byMatch = new Map();
+  for (const rows of Object.values(byPlayer)) {
+    for (const r of rows ?? []) {
+      if (!isMultiDay(r.format) || !r.matchId) continue;
+      if (!byMatch.has(r.matchId)) byMatch.set(r.matchId, []);
+      byMatch.get(r.matchId).push(r);
+    }
+  }
+  if (!byMatch.size) return { matches: 0, live: 0, observed: 0, unrecoverable: 0 };
+
+  // The scrape runs at 00:00 IST, which is mid-afternoon in England and before dawn
+  // in Australia, so "today" in UTC is the only defensible observation date: it is
+  // the day the figures were read, and the match page's own day label is what
+  // actually places them.
+  const observedOn = new Date().toISOString().slice(0, 10);
+
+  let live = 0;
+  let observed = 0;
+  let unrecoverable = 0;
+  let commentaryDated = 0;
+  let noFeed = 0;
+
+  for (const [matchId, rows] of byMatch) {
+    // A match settled by its commentary feed is final: the feed does not change once
+    // the match is over, so it is read once per match ever.
+    const known = Object.values(store.rows).find((x) => x.matchId === matchId);
+    if (known?.settled) continue;
+
+    const meta = await source.fetchMatchDay(matchId, { maxAgeMs: 0 });
+    const capturable = stillCapturable(meta);
+    if (capturable) live++;
+
+    // The commentary feed is the authority on which day each innings ended, because
+    // it states it outright and can be re-read at any time. The live `.day-session`
+    // label only says which day the *match* is on and is deleted when the match ends,
+    // so inferring a closing day from it requires every scheduled run to have landed
+    // — and one missed run would freeze an innings at its overnight figure forever.
+    const feed = await settleFromCommentary(matchId);
+    if (feed?.dated) commentaryDated++;
+    else if (feed === null) noFeed++;
+
+    for (const r of rows) {
+      const innings = r.innings ?? 1;
+      // Prefer the feed's closing day. Fall back to the live label, which still
+      // places a figure read mid-match on the day it was read.
+      const ended = feed?.endedOn?.[innings] ?? null;
+      const { day, date, from } = ended
+        ? { day: dayNumber(meta?.startDate, ended), date: ended, from: 'commentary' }
+        : resolveDay({
+            label: meta?.day,
+            startDate: meta?.startDate,
+            observedOn,
+            status: meta?.status,
+          });
+
+      if (!(day >= 1)) {
+        // Nothing can date this innings: no feed, and either the match is over or
+        // its page could not be read. It keeps the match start date.
+        if (from === 'finished' || from === 'unknown') unrecoverable++;
+        continue;
+      }
+
+      observe(store, {
+        playerId: r.playerId,
+        matchId,
+        innings,
+        day,
+        date,
+        batting: r.batting ?? null,
+        bowling: r.bowling ?? null,
+        // A figure read while the match is still being played may still move. Once
+        // the feed has settled the match, it cannot.
+        provisional: ended && !capturable ? undefined : capturable || undefined,
+        meta: {
+          fixture: r.fixture ?? null,
+          competition: r.competition ?? null,
+          format: r.format ?? 'Test',
+          team: r.team ?? null,
+          opponent: r.opponent ?? null,
+          startDate: meta?.startDate ?? null,
+          endDate: meta?.endDate ?? null,
+          venue: meta?.venue ?? null,
+          status: meta?.status ?? null,
+          // A finished match whose feed was walked end to end needs no further
+          // reads, so it is never fetched again.
+          settled: Boolean(feed?.complete) && !capturable,
+        },
+      });
+      observed++;
+    }
+  }
+
+  saveStore(store);
+  return { matches: byMatch.size, live, observed, unrecoverable, commentaryDated, noFeed };
+}
+
+/** Which day of the match is this date? Day 1 is the start date itself. */
+function dayNumber(startDate, date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(startDate ?? ''))) return 1;
+  const n = Math.round(
+    (Date.parse(`${date}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 864e5
+  );
+  return n >= 0 ? n + 1 : 1;
+}
+
+/**
+ * Ask the commentary feed when each innings of this match ended.
+ *
+ * Returns null when the match has no feed at all — coverage is per match, not per
+ * tier, so a one-request probe decides it before spending a 200-page walk. Every
+ * failure is soft: the caller falls back to the live label, and an innings that
+ * cannot be dated keeps the match start date, exactly as before this existed.
+ */
+async function settleFromCommentary(matchId) {
+  try {
+    if (!(await hasFeed(matchId))) return null;
+    const r = await inningsDays(matchId);
+    return { ...r, dated: Object.keys(r.endedOn).length > 0 };
+  } catch {
+    return undefined;
+  }
 }
 
 function flush(byPlayer) {

@@ -17,6 +17,7 @@ import { PlayerRegistry } from './core/registry.js';
 import { loadSquadFile, resolveSquads, classifySquad } from './core/squads.js';
 import { displayName, stripDisambiguator } from './core/display-name.js';
 import { mergePerformances, mergeStats } from './core/merge.js';
+import { loadStore, expand } from './core/match-days.js';
 import { existsSync, readFileSync } from 'node:fs';
 
 const CREX_PATH = new URL('../data/crex-players.json', import.meta.url).pathname;
@@ -75,10 +76,25 @@ function unfinishedTest(row, today) {
 /**
  * A figure that cannot be shown yet: a limited-overs innings from today, which may
  * still be being played, or a Test innings from today, whose day is not yet over.
+ *
+ * A row the snapshot store has dated is exempt, and that exemption is the whole
+ * reason the store is worth keeping. The blanket "nothing from today" rule exists
+ * because CREX gives no signal that a session has ended, so a figure read now might
+ * be a batsman mid-over. A stored row does have that signal: it was placed by the
+ * match page's own `Day N` label, and the day it names has to have been reached for
+ * the label to say so.
+ *
+ * It matters because of when the job runs. 00:00 IST is mid-afternoon in England and
+ * pre-dawn in Australia, so a day of Test cricket that finished hours ago is dated
+ * "today" in UTC and would be withheld for another 24 hours — the reader would see an
+ * empty page for a Test that is three days old. Live rows still carry `provisional`,
+ * so nothing is presented as final before it is.
  */
 function tooEarlyToShow(row, today) {
   const d = String(row?.date ?? '');
-  return /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= today;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  if (row?.multiDay) return d > today;
+  return d >= today;
 }
 
 export async function buildIndex({ from = SEASON_START, slugs } = {}) {
@@ -257,7 +273,33 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
     }
   }
 
-  const performances = mergePerformances({ crexRows, cricsheetRows, from });
+  // Multi-day cricket: re-date each innings to the day it actually ended.
+  //
+  // CREX stamps every innings of a Test with the match's *start* date, so without
+  // this a Test week reads as one enormous day followed by four empty ones — on 23
+  // August, 55 of the day's 72 innings were Test innings really spread across five
+  // days. Where the snapshot store saw the match being played, it knows which day
+  // each innings concluded on, and that row replaces the collapsed one.
+  //
+  // The figures are untouched: an innings is shown whole, exactly as CREX prints it.
+  // Only its date changes, and only when this project watched the match itself.
+  // An innings from a Test that finished before the store existed keeps the start
+  // date, because nothing on CREX can place it any better.
+  const dayRows = expand(loadStore()).filter((r) => r.date >= from && !tooEarlyToShow(r, today));
+  const replaced = new Set();
+  for (const r of dayRows) {
+    // The collapsed row this innings came from, keyed as the scrape wrote it.
+    replaced.add(`${r.playerId}|${r.matchId}|${r.inningsNo}`);
+  }
+  const keptCrex = crexRows.filter(
+    (r) => !r.matchId || !replaced.has(`${r.playerId}|${r.matchId}|${r.innings ?? 1}`)
+  );
+
+  const performances = mergePerformances({
+    crexRows: keptCrex.concat(dayRows),
+    cricsheetRows,
+    from,
+  });
   const merge = mergeStats(performances);
 
   /** @type {Map<string, any>} */

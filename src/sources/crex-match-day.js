@@ -1,0 +1,293 @@
+/**
+ * Which calendar day is a multi-day match on, and what had each player done by then?
+ *
+ * CREX prints every innings of a Test under the match's *start* date. A Test that
+ * began on 23 August puts all four innings on the 23rd, so a daily tracker shows 55
+ * innings on one day and nothing for the four days that follow — which is the opposite
+ * of what a day-by-day page is for.
+ *
+ * There is no per-innings date anywhere on CREX to fix that with. The scorecard was
+ * checked for day, session, stumps and fall-of-wicket markers: it carries none. What
+ * the *match* page carries, while the match is being played, is this:
+ *
+ *   <div class="day-session"><span>Day 3</span><span>-</span><span>Session 3</span></div>
+ *
+ * plus a JSON-LD SportsEvent with the match's `startDate`, `endDate` and status. That
+ * is enough to date a day exactly: `startDate + (day - 1)`, verified against a live
+ * Irani Cup Test where the page said Day 3, startDate was 1 October and the day was
+ * the 3rd. It also detects a washed-out or rest day, which plain arithmetic on the
+ * start date cannot — if the page says Day 3 but four days have passed, a day was
+ * lost, and only the label knows.
+ *
+ * The catch, and the reason this module records rather than parses: once a match is
+ * over the `day-session` element is gone. A finished Test carries no day information
+ * at all. So a day's cricket has to be captured while it is happening, and history
+ * cannot be rebuilt afterwards. Everything here is therefore written to a store that
+ * accumulates, one row per (player, match, innings), holding the figure observed on
+ * each day of play.
+ *
+ * What the site then shows is each innings **once**, on the day it ended, with the
+ * figure CREX prints:
+ *
+ *   day 2 observed:  51* (60)   -> the innings is still running
+ *   day 3 observed: 126  (131)  -> 126 (131), dated day 3
+ *
+ * The day an innings ended is the last day its figure changed. That single rule covers
+ * every case, because the job runs daily and a day is only recorded once its play is
+ * over: each snapshot is a settled end-of-day figure, so a figure that has stopped
+ * moving has stopped for good. It needs no dismissal to anchor it, which matters for a
+ * batsman left not out by a declaration — there is no "out" to look for, and the
+ * comparison finds the right day anyway.
+ *
+ * `crex-commentary.js` reinforces this where a match has a commentary feed, because
+ * the feed states each innings' closing day outright and can be re-read long after the
+ * match. That matters for two things the comparison cannot do on its own: dating the
+ * 393 Test innings scraped before any of this existed, and surviving a missed run,
+ * since a day never observed is a day the comparison cannot reason about.
+ *
+ * An earlier version split the innings across days by subtraction ("+75 on day 3").
+ * It was arithmetically sound and nobody wanted it: a hundred is a hundred, and no
+ * scorecard anywhere agrees with a figure that exists only in this project.
+ *
+ * Only the date is inferred. Every figure shown is CREX's own, unmodified.
+ */
+
+/** A Test is scheduled for five days; the store keeps a row open that long. */
+export const MAX_TEST_DAYS = 5;
+
+/** Formats whose innings span more than one calendar day. */
+export const MULTI_DAY = /^(test|first class|fc)$/i;
+
+export const isMultiDay = (format) => MULTI_DAY.test(String(format ?? '').trim());
+
+/**
+ * Read the day state off a match page's HTML.
+ *
+ * Returns `{ day, session, startDate, endDate, status }` with whatever was present.
+ * `day` is null for a finished match, which is expected rather than an error: the
+ * element only exists while the match is live.
+ */
+export function parseMatchDay(html) {
+  const h = String(html ?? '');
+
+  // The structured day marker, present only while the match is in progress.
+  const ds = h.match(/class="day-session"[^>]*>([\s\S]{0,400}?)<\/div>/);
+  const dayText = ds ? ds[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+  const day = dayText.match(/day\s*(\d+)/i)?.[1];
+  const session = dayText.match(/session\s*(\d+)/i)?.[1];
+
+  const event = sportsEvent(h);
+
+  return {
+    day: day ? +day : null,
+    session: session ? +session : null,
+    startDate: iso(event?.startDate),
+    // The scheduled end, not the actual finish: a Test won by an innings inside
+    // three days still reports a five-day window. Useful as a bound, never as a
+    // result.
+    endDate: iso(event?.endDate),
+    status: event?.eventStatus ?? null,
+    venue: event?.location?.name?.replace(/''/g, "'") ?? null,
+  };
+}
+
+/** The SportsEvent JSON-LD block, which carries the match's real span. */
+function sportsEvent(html) {
+  for (const m of String(html).matchAll(
+    /<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/g
+  )) {
+    if (!m[1].includes('"SportsEvent"')) continue;
+    try {
+      const d = JSON.parse(m[1]);
+      if (d?.['@type'] === 'SportsEvent') return d;
+    } catch {
+      // A malformed block is skipped rather than failing the match: the day label
+      // above is the primary signal and may still have parsed.
+    }
+  }
+  return null;
+}
+
+/** "2026-08-27T15:30:00+05:30" -> "2026-08-27", keeping the date CREX intended. */
+function iso(s) {
+  const m = String(s ?? '').match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Which calendar date is day N of a match that started on `startDate`?
+ *
+ * Days are consecutive unless play was lost, so this is the arithmetic answer and the
+ * caller should prefer `dayFromLabel` when a label is available.
+ */
+export function dateOfDay(startDate, day) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(startDate ?? '')) || !(day >= 1)) return null;
+  return new Date(Date.parse(`${startDate}T00:00:00Z`) + (day - 1) * 864e5)
+    .toISOString()
+    .slice(0, 10);
+}
+
+/** How many days after the start is `date`? Day 1 is the start date itself. */
+export function dayOfDate(startDate, date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(startDate ?? ''))) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date ?? ''))) return null;
+  const n = Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 864e5);
+  return n >= 0 ? n + 1 : null;
+}
+
+/**
+ * The day a snapshot taken on `observedOn` belongs to.
+ *
+ * The page's own label wins wherever it exists, because it is the only thing that
+ * knows about a day washed out or a rest day: a Test starting on the 1st whose page
+ * says "Day 3" on the 4th has lost a day, and the arithmetic answer (Day 4) would be
+ * wrong. Without a label — a match that has finished since the last run — the
+ * observation date is placed by arithmetic instead.
+ *
+ * `observedOn` is the date the scrape ran *in the match's own context*. The daily job
+ * runs at 00:00 IST, which is mid-afternoon in England and pre-dawn in Australia, so
+ * a run can land in the middle of a day's play or between two of them. That is why
+ * the label is preferred and why nothing here assumes the run happened at stumps.
+ */
+export function resolveDay({ label, startDate, observedOn, status }) {
+  if (label >= 1) {
+    return { day: label, date: dateOfDay(startDate, label) ?? observedOn, from: 'label' };
+  }
+
+  // A finished match has no day marker, and the observation date is after the last
+  // day of play rather than during it — so arithmetic on "today" would file the whole
+  // innings on whatever day the scrape happened to run. Refuse instead.
+  //
+  // This is the one case that cannot be solved: a Test that ended before this project
+  // ever looked at it has no recoverable day information anywhere on CREX. Those
+  // innings keep the match's start date, exactly as before, and are marked so the
+  // site can say the split is unavailable rather than imply a day.
+  if (status && status !== 'Live') {
+    return { day: null, date: observedOn, from: 'finished' };
+  }
+
+  const n = dayOfDate(startDate, observedOn);
+  return n >= 1 && n <= MAX_TEST_DAYS
+    ? { day: n, date: observedOn, from: 'arithmetic' }
+    : { day: null, date: observedOn, from: 'unknown' };
+}
+
+/**
+ * Can this match's days still be captured?
+ *
+ * Only while it is being played. Once CREX marks it finished the `day-session`
+ * element is gone, and a match that finished before it was first observed can never
+ * be split by day — there is no day information left on the site to read. The caller
+ * uses this to decide whether a match is worth refetching and whether the innings
+ * should be presented as a daily figure or as a whole-match one.
+ */
+export function stillCapturable(meta) {
+  return Boolean(meta) && meta.status !== 'Finished' && !meta.error;
+}
+
+/* ── snapshots ──
+   One row per (player, match, innings), holding the cumulative figure seen on each
+   day. Daily contributions are the differences between consecutive days. */
+
+/** The key a snapshot row is stored under. */
+export const snapKey = (playerId, matchId, innings) =>
+  `${playerId}|${matchId}|${innings ?? 1}`;
+
+/**
+ * Fold an observation into a snapshot row, returning the updated row.
+ *
+ * Re-observing the same day overwrites that day rather than appending: the daily job
+ * may run twice, and a Test's figure grows through the day, so the last read of a day
+ * is the one closest to stumps and the one to keep.
+ */
+export function recordSnapshot(row, { day, date, batting, bowling, provisional }) {
+  const next = { ...(row ?? {}), days: { ...(row?.days ?? {}) } };
+  if (!(day >= 1)) return next;
+  next.days[day] = {
+    date,
+    batting: batting ?? null,
+    bowling: bowling ?? null,
+    provisional: provisional || undefined,
+  };
+  return next;
+}
+
+/**
+ * Place a snapshot row on the day its innings belongs to.
+ *
+ * An innings is one performance and reads as one: a hundred is a hundred, not two
+ * half-rows on consecutive dates. So it appears **once**, on the day it ended, with
+ * the whole figure CREX prints. A batsman 51* overnight who finishes on 126 shows 126
+ * on the day he was dismissed, and nothing on the day before — the alternative,
+ * crediting him with "+75", is arithmetic no scorecard agrees with.
+ *
+ * The exception is an innings still in progress, which has no end day yet. That shows
+ * the running figure on the latest day observed, marked unfinished, so a reader
+ * following a Test live sees "51*" at stumps rather than an empty page. The next run
+ * supersedes it, and when the innings ends the row moves to the day it ended on.
+ *
+ * What this fixes is the pile-up: CREX stamps all four innings of a Test with the
+ * match's start date, so a five-day Test lands entirely on day one. Dating each
+ * innings by its own conclusion spreads a Test across the days it was actually
+ * played, which is what a daily tracker is for.
+ */
+export function dailyRows(row) {
+  const days = Object.keys(row?.days ?? {})
+    .map(Number)
+    .filter((n) => n >= 1)
+    .sort((a, b) => a - b);
+  if (!days.length) return [];
+
+  // The day the innings concluded is the last day its figure changed.
+  //
+  // That one rule covers every case, because the job runs daily and only records days
+  // whose play is over: each snapshot is a settled end-of-day figure, so a figure that
+  // stops moving has stopped for good. A batsman dismissed on day 2 and one left 112*
+  // when the innings was declared both last changed on day 2, and both belong there —
+  // the dismissal adds nothing the comparison does not already know.
+  const endDay = lastDayThatMoved(row, days);
+
+  const snap = row.days[endDay];
+  if (!snap) return [];
+
+  const batted = snap.batting && (snap.batting.balls || snap.batting.runs);
+  const bowled = snap.bowling && (snap.bowling.wickets || snap.bowling.runs);
+  if (!batted && !bowled) return [];
+
+  // A figure is still running only while the match it belongs to is. A later day
+  // observed without the figure moving is itself the evidence that it has settled —
+  // including for a batsman left not out, whose innings ended by a declaration or by
+  // the match finishing rather than by a dismissal.
+  const settled = endDay < days[days.length - 1] || !snap.provisional;
+
+  return [{
+    day: endDay,
+    date: snap.date,
+    batting: snap.batting ?? null,
+    bowling: snap.bowling ?? null,
+    // Which days the innings actually spanned, so the page can say "over days 2-3"
+    // rather than implying it all happened at once.
+    spanned: days.filter((d) => d <= endDay),
+    // An innings still being played: the figure is the running one, not a result.
+    provisional: settled ? undefined : (snap.provisional || undefined),
+    multiDay: true,
+  }];
+}
+
+/** The last day on which either the batting or the bowling figure changed. */
+function lastDayThatMoved(row, days) {
+  let last = days[0];
+  let prev = null;
+  for (const day of days) {
+    const s = row.days[day];
+    const moved =
+      !prev ||
+      (s.batting?.runs ?? 0) !== (prev.batting?.runs ?? 0) ||
+      (s.batting?.balls ?? 0) !== (prev.batting?.balls ?? 0) ||
+      (s.bowling?.wickets ?? 0) !== (prev.bowling?.wickets ?? 0) ||
+      (s.bowling?.runs ?? 0) !== (prev.bowling?.runs ?? 0);
+    if (moved) last = day;
+    prev = s;
+  }
+  return last;
+}

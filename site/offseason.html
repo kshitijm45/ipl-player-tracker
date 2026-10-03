@@ -163,8 +163,8 @@
     max-width: 30ch;
   }
 
-  .seek { padding: 0 20px 18px; flex: none; }
-  .seek div {
+  .seek { padding: 0 20px 18px; flex: none; position: relative; }
+  .seek > div {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -174,16 +174,82 @@
     padding: 11px 14px;
     transition: border-color .16s var(--e), background .16s var(--e);
   }
-  .seek div:focus-within { border-color: var(--ink-3); background: var(--surface); }
+  .seek > div:focus-within { border-color: var(--ink-3); background: var(--surface); }
   .seek svg { flex: none; color: var(--ink-3); }
   .seek input { border: 0; background: none; outline: none; width: 100%; font-size: 13.5px; }
   .seek input::placeholder { color: var(--ink-3); }
 
+  /* The clear affordance only exists once there is something to clear, so the
+     field is not permanently carrying a dead button. */
+  .seek-x {
+    flex: none; border: 0; background: none; padding: 0; cursor: pointer;
+    color: var(--ink-3); font-size: 15px; line-height: 1; display: none;
+  }
+  .seek-x:hover { color: var(--ink); }
+  .seek[data-on="true"] .seek-x { display: block; }
+
   .rail-scroll { flex: 1; overflow-y: auto; padding: 0 12px 28px; scrollbar-width: thin; }
 
-  .seek-note {
-    padding: 8px 14px 14px;
+  /* ── search results ──
+     A ranked list of players, not a filter on the page behind it: typing offers
+     people to open rather than silently narrowing every other view. */
+  .hits { padding: 0 12px 28px; }
+  .hits-note {
+    padding: 4px 14px 10px;
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .hit {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 10px 14px;
+    background: none;
+    border: 0;
+    border-radius: 10px;
+    text-align: left;
+    color: var(--ink-2);
+    cursor: pointer;
+    transition: background .14s var(--e), color .14s var(--e);
+  }
+  .hit:hover, .hit[data-cursor="true"] { background: var(--sunk); color: var(--ink); }
+  .hit[data-cursor="true"] { box-shadow: inset 0 0 0 1px var(--line); }
+  .hit .crest {
+    flex: none;
+    width: 34px; height: 34px;
+    display: grid; place-items: center;
+    border-radius: 9px;
+    background: rgba(var(--team-wash), .16);
+    font-size: 9.5px; font-weight: 700; letter-spacing: .02em;
+    font-family: Archivo, sans-serif;
+    color: var(--ink);
+  }
+  .hit-main { min-width: 0; flex: 1; }
+  .hit-main b {
+    display: block;
+    font-size: 13.5px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .hit-main span {
+    display: block;
+    margin-top: 2px;
+    font-size: 11.5px;
+    color: var(--ink-3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* Why a player matched, when it was not his display name that did it. */
+  .hit-main i { font-style: normal; color: var(--ink-2); }
+  .hit mark { background: none; color: var(--gold); font-weight: 700; }
+  .hit-fig { flex: none; text-align: right; font-size: 11.5px; color: var(--ink-3); }
+  .hit-fig b { display: block; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+  .seek-none {
+    padding: 10px 14px 16px;
     font-size: 12.5px;
+    line-height: 1.6;
     color: var(--ink-3);
   }
 
@@ -790,6 +856,16 @@
   }
   @media (prefers-color-scheme: dark) { .live-dot { background: #e2564e; } }
 
+  /* Which day of a Test an innings belongs to: present but subordinate to the figure. */
+  .carried {
+    display: block;
+    margin-top: 3px;
+    font-size: 10.5px;
+    letter-spacing: .02em;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+
   /* ─── fixtures ─── */
   .fx-side { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
              color: var(--muted); margin: 6px 0 3px; }
@@ -940,15 +1016,19 @@
       <h1>OFF<i>SEASON</i></h1>
       <p>The IPL lasts two months. This follows its players through the other ten.</p>
     </div>
-    <div class="seek">
+    <div class="seek" id="seekWrap" data-on="false">
       <div>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true">
           <circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>
         </svg>
-        <input id="seek" type="search" placeholder="Find a player" autocomplete="off" aria-label="Find a player">
+        <input id="seek" type="search" placeholder="Find a player" autocomplete="off"
+               aria-label="Find a player" role="combobox" aria-expanded="false"
+               aria-controls="hits" aria-autocomplete="list">
+        <button class="seek-x" id="seekX" aria-label="Clear search" tabindex="-1">&times;</button>
       </div>
     </div>
     <nav class="rail-scroll" id="clubs" aria-label="Franchises"></nav>
+    <div class="rail-scroll hits" id="hits" role="listbox" aria-label="Search results" hidden></div>
   </aside>
 
   <div class="main">
@@ -978,7 +1058,7 @@
 window.__DATA__ = { players: [], perfs: [], days: [], meta: {}, fixtures: [] };
 
 const IPL = 'Indian Premier League';
-const S = { view: 'today', club: '', player: null, fmt: '', q: '', day: null };
+const S = { view: 'today', club: '', player: null, fmt: '', q: '', day: null, cursor: -1 };
 let P = [], F = [], D = [], M = {}, FX = [], byP = new Map(), byD = new Map();
 
 const $ = (i) => document.getElementById(i);
@@ -1010,12 +1090,17 @@ function dLong(d) {
 }
 const okFmt = (r) => !S.fmt || r.format === S.fmt;
 
-/** Players in scope: the chosen club's squad, or everyone when none is chosen. */
+/**
+ * Players in scope: the chosen club's squad, or everyone when none is chosen.
+ *
+ * The search box deliberately does *not* narrow this. Typing used to re-scope every
+ * view at once — the daily tracker, Coming Up, Form and the leaderboards — so a
+ * reader looking up one name found the day's cricket replaced by "Nothing. Try
+ * another filter." Search now offers players to open (see `matches`), and the club
+ * rail remains the only thing that scopes the page.
+ */
 function squadInScope() {
-  let list = S.club ? P.filter((p) => club1(p) === S.club) : P;
-  const q = S.q.trim().toLowerCase();
-  if (q) list = list.filter((p) => p.name.toLowerCase().includes(q));
-  return list;
+  return S.club ? P.filter((p) => club1(p) === S.club) : P;
 }
 
 /** Does this innings belong to a player currently in scope? */
@@ -1027,8 +1112,98 @@ let scopeIds = null;
 
 /** Recompute the scope set before any view reads it. */
 function refreshScope() {
-  const scoped = S.club || S.q.trim();
-  scopeIds = scoped ? new Set(squadInScope().map((p) => p.id)) : null;
+  scopeIds = S.club ? new Set(squadInScope().map((p) => p.id)) : null;
+}
+
+/* ── search ──
+   One box, matched against everything a reader might plausibly type. Only the
+   display name was searched before, so the data's other spellings were unreachable:
+   the register knows "MD Shanaka" while the page shows "Dasun Shanaka", and a reader
+   who typed the former got nothing. Teams, competitions and the CREX slug are all
+   indexed too, so "Hundred", "CSK" and "Ranji" are all routes to a player. */
+
+/** Strip accents and punctuation so "Lhuan-dre" is reachable as "lhuandre". */
+function fold(s) {
+  return String(s ?? '').toLowerCase().normalize('NFD')
+    .replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+/** A player's searchable text, built once and cached on the record. */
+function haystack(p) {
+  if (p._h) return p._h;
+  const name = fold(p.name);
+  // The slug carries a CREX disambiguator ("hardik-pandya-C3"); the trailing code is
+  // noise to a reader but harmless to keep, and occasionally it is what was pasted.
+  const alt = [p.registerName, p.listedAs, p.crexSlug].filter(Boolean).map(fold);
+  const teams = (p.iplTeams ?? []).concat(p.teams ?? []).map(fold);
+  const abbr = (p.iplTeams ?? []).map((t) => fold(ABBR[t] ?? ''));
+  const comps = (p.competitions ?? []).map(fold);
+  p._h = {
+    name,
+    words: name.split(' ').filter(Boolean),
+    alt: alt.join(' '),
+    altWords: alt.flatMap((a) => a.split(' ')).filter(Boolean),
+    teams: teams.concat(abbr).join(' '),
+    comps: comps.join(' '),
+  };
+  return p._h;
+}
+
+/**
+ * Score one player against a query, or 0 for no match.
+ *
+ * Ranked rather than filtered, because `includes` on its own buries the obvious
+ * answer: "sam" matched Abdul Samad and Sameer Rizvi before Sam Curran, in whatever
+ * order the squad happened to be in. An exact name beats a word that starts with the
+ * query, which beats a substring anywhere, which beats a team or competition hit.
+ */
+function score(p, q) {
+  const h = haystack(p);
+  if (h.name === q) return 1000;
+  if (h.name.startsWith(q)) return 900 - h.name.length;
+  // A surname typed on its own is the common case, so any word starting the query
+  // ranks well above a mid-word substring.
+  if (h.words.some((w) => w.startsWith(q))) return 800 - h.name.length;
+  if (h.name.includes(q)) return 600 - h.name.length;
+  // Other spellings of the same person: the register name, the squad sheet's
+  // spelling, the CREX slug.
+  if (h.altWords.some((w) => w.startsWith(q))) return 500 - h.name.length;
+  if (h.alt.includes(q)) return 400 - h.name.length;
+  // A franchise, country or tournament: a broad hit, so it sorts last and leans on
+  // the player's own recency to order it.
+  if (h.teams.includes(q)) return 200;
+  if (h.comps.includes(q)) return 100;
+  return 0;
+}
+
+/** Why this player matched, when the display name alone does not explain it. */
+function because(p, q) {
+  const h = haystack(p);
+  if (h.name.includes(q)) return null;
+  if (h.alt.includes(q)) {
+    const hit = [p.registerName, p.listedAs].find((n) => n && fold(n).includes(q));
+    return hit ? `also ${hit}` : null;
+  }
+  const team = (p.iplTeams ?? []).concat(p.teams ?? []).find((t) => fold(t).includes(q)) ??
+    (p.iplTeams ?? []).find((t) => fold(ABBR[t] ?? '').includes(q));
+  if (team) return team;
+  const cp = (p.competitions ?? []).find((c) => fold(c).includes(q));
+  return cp ? comp(cp) : null;
+}
+
+/** The ranked matches for the current query, best first. */
+function matches(limit = 40) {
+  const q = fold(S.q);
+  if (!q) return [];
+  return P
+    .map((p) => ({ p, s: score(p, q) }))
+    .filter((x) => x.s > 0)
+    .sort((a, b) =>
+      b.s - a.s ||
+      (b.p.lastPlayed ?? '').localeCompare(a.p.lastPlayed ?? '') ||
+      b.p.runs - a.p.runs)
+    .slice(0, limit)
+    .map((x) => x.p);
 }
 
 /* ── deep links ──
@@ -1124,13 +1299,8 @@ function syncControls() {
    so the rail stays a short, scannable list of ten rather than 260 names. */
 function drawRail() {
   const clubs = [...new Set(P.map(club1).filter(Boolean))].sort();
-  const q = S.q.trim();
-  const hits = q ? squadInScope().length : null;
 
   $('clubs').innerHTML = `
-    ${q ? `<div class="seek-note">${hits
-      ? `${hits} player${hits === 1 ? ' matches' : 's match'} “${esc(q)}”`
-      : `No player matches “${esc(q)}”`}</div>` : ''}
     ${clubs.map((c) => {
       const squad = P.filter((p) => club1(p) === c);
       const on = S.club === c;
@@ -1157,13 +1327,125 @@ $('clubs').addEventListener('click', (e) => {
   drawRail(); draw(); shut();
 });
 
+/**
+ * The results list, shown in place of the franchise rail while a query is live.
+ *
+ * It replaces the rail rather than pushing it down because both are the full height
+ * of the sidebar; stacking them put the first result below the fold on a laptop.
+ */
+function drawHits() {
+  const q = S.q.trim();
+  $('seekWrap').dataset.on = String(Boolean(q));
+  $('seek').setAttribute('aria-expanded', String(Boolean(q)));
+  $('clubs').hidden = Boolean(q);
+  $('hits').hidden = !q;
+  if (!q) { $('hits').innerHTML = ''; S.cursor = -1; return; }
+
+  const list = matches();
+  const folded = fold(S.q);
+
+  if (!list.length) {
+    $('hits').innerHTML = `<div class="seek-none">
+      Nothing matches <b>“${esc(q)}”</b>.<br>
+      Try a surname, a franchise (“CSK”) or a competition (“Hundred”).
+    </div>`;
+    S.cursor = -1;
+    return;
+  }
+
+  if (S.cursor >= list.length) S.cursor = list.length - 1;
+
+  $('hits').innerHTML = `
+    <div class="hits-note">${list.length} player${list.length === 1 ? '' : 's'}</div>
+    ${list.map((p, n) => {
+      const c = club1(p);
+      const why = because(p, folded);
+      const sub = [why ? `<i>${esc(why)}</i>` : null, c ? esc(c) : null]
+        .filter(Boolean).join(' · ');
+      return `<button class="hit" role="option" data-team="${esc(c)}" data-id="${esc(p.id)}"
+          data-cursor="${n === S.cursor}" aria-selected="${n === S.cursor}">
+        <span class="crest">${esc(ABBR[c] ?? (c ? c.slice(0, 3).toUpperCase() : '—'))}</span>
+        <span class="hit-main">
+          <b>${mark(p.name, folded)}</b>
+          <span>${sub || '&nbsp;'}</span>
+        </span>
+        <span class="hit-fig">${p.innings
+          ? `<b>${p.runs}</b>${p.wickets ? `${p.wickets}w` : 'runs'}`
+          : '<b>—</b>yet to play'}</span>
+      </button>`;
+    }).join('')}`;
+
+  for (const el of $('hits').querySelectorAll('[data-id]')) {
+    el.onclick = () => open(el.dataset.id);
+  }
+}
+
+/** Highlight the matched run inside a display name. */
+function mark(name, q) {
+  const i = fold(name).indexOf(q);
+  if (i === -1 || !q) return esc(name);
+  // The folded string and the original can differ in length (accents, hyphens), so
+  // the highlight is only applied when the two line up; a wrong offset would cut a
+  // name mid-character, and an unhighlighted name is a better failure than that.
+  if (fold(name).length !== name.length) return esc(name);
+  return `${esc(name.slice(0, i))}<mark>${esc(name.slice(i, i + q.length))}</mark>${esc(name.slice(i + q.length))}`;
+}
+
+/** Open a player's page and clear the search that led there. */
+function open(id) {
+  if (!id) return;
+  S.player = id;
+  S.view = 'player';
+  S.q = '';
+  S.cursor = -1;
+  $('seek').value = '';
+  drawHits();
+  drawRail();
+  draw();
+  shut();
+}
+
 $('seek').addEventListener('input', (e) => {
   S.q = e.target.value;
-  S.day = null;
-  refreshScope();
-  drawRail(); // the rail carries the match count, so it has to redraw too
-  draw();
+  S.cursor = -1;
+  drawHits();
 });
+
+/* Arrow keys walk the list, Enter opens, Escape clears — so the whole thing is
+   usable without the mouse, and Enter on a single hit is the fast path. */
+$('seek').addEventListener('keydown', (e) => {
+  const list = matches();
+  if (e.key === 'Escape') {
+    if (!S.q) return;
+    e.preventDefault();
+    S.q = ''; S.cursor = -1; e.target.value = '';
+    drawHits();
+    return;
+  }
+  if (!list.length) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const d = e.key === 'ArrowDown' ? 1 : -1;
+    S.cursor = (S.cursor + d + list.length + 1) % (list.length + 1) - 1;
+    if (S.cursor < 0) S.cursor = d === 1 ? 0 : list.length - 1;
+    drawHits();
+    $('hits').querySelector('[data-cursor="true"]')?.scrollIntoView({ block: 'nearest' });
+    return;
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    // With nothing picked, Enter takes the top hit: typing a full surname and
+    // pressing return should not require an arrow key first.
+    open((list[S.cursor] ?? list[0]).id);
+  }
+});
+
+$('seekX').onclick = () => {
+  S.q = ''; S.cursor = -1;
+  $('seek').value = '';
+  drawHits();
+  $('seek').focus();
+};
 
 /* ── router ── */
 function draw() {
@@ -1358,7 +1640,21 @@ function figure(r) {
   const bowl = w && (w.balls || w.wickets)
     ? `<span class="bowl ${w.wickets >= 3 ? 'haul' : ''}">${w.overs ? `${w.overs}–${w.runs}–${w.wickets}` : `${w.wickets}/${w.runs}`}</span>`
     : '';
-  return (bat + bowl || '<span class="runs nil">dnb</span>') + live;
+  // An innings dated by this project rather than by CREX's start-date stamp. The
+  // figure is the whole innings; the note says which day of the match it ended on,
+  // and when it was built over more than one day.
+  const span = r.multiDay ? spanNote(r) : '';
+  return (bat + bowl || '<span class="runs nil">dnb</span>') + span + live;
+}
+
+/** "Day 3" or "Days 2–3" — where a Test innings sits within its match. */
+function spanNote(r) {
+  const d = r.spanned ?? [];
+  if (d.length > 1) {
+    const first = d[0], last = d[d.length - 1];
+    return `<span class="carried" title="Built over more than one day's play">Days ${first}–${last}</span>`;
+  }
+  return r.day ? `<span class="carried">Day ${r.day}</span>` : '';
 }
 
 function bigRow(r, p) {

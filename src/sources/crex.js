@@ -28,6 +28,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Source } from './source.js';
+import { parseMatchDay } from './crex-match-day.js';
 
 const CACHE_DIR = new URL('../../data/cache/crex', import.meta.url).pathname;
 const UA =
@@ -128,6 +129,44 @@ export class CrexSource extends Source {
 
   writeCache(key, data) {
     writeFileSync(this.cachePath(key), JSON.stringify({ at: Date.now(), data }));
+  }
+
+  /**
+   * The day state of one match: which day of play it is on, and the match's span.
+   *
+   * This is the only CREX page that can date an innings of a Test. The player page
+   * stamps all four innings with the match's start date, and the scorecard carries no
+   * day, session or stumps marker at all — so a multi-day innings can only be placed
+   * by reading the match page while the match is being played, where the day is
+   * printed as `.day-session`.
+   *
+   * Fetched with plain HTTP rather than through Playwright: the markup needed is
+   * server-rendered, so a browser context per match would cost seconds each for
+   * nothing. Cached by match id, which is stable, and re-read while the match is live
+   * because the whole point is the figure as it stands today.
+   */
+  async fetchMatchDay(matchId, { maxAgeMs = 3600e3 } = {}) {
+    const key = `matchday_${matchId}`;
+    const cached = this.readCache(key, maxAgeMs);
+    // A finished match can never change again, so its cache never expires. A live one
+    // is re-read every run.
+    if (cached && cached.status === 'Finished') return cached;
+    if (cached && maxAgeMs !== 0) return cached;
+
+    try {
+      const res = await fetch(
+        `https://crex.com/scoreboard/${matchId}/match-scorecard`,
+        { headers: { 'User-Agent': UA }, redirect: 'follow' }
+      );
+      if (!res.ok) return cached ?? { matchId, error: `http ${res.status}` };
+      const data = { matchId, ...parseMatchDay(await res.text()) };
+      this.writeCache(key, data);
+      return data;
+    } catch (err) {
+      // A match whose day cannot be read keeps whatever the store already knows;
+      // the innings still reaches the site under the match's start date.
+      return cached ?? { matchId, error: String(err?.message ?? err).slice(0, 120) };
+    }
   }
 
   /**
@@ -599,7 +638,13 @@ async function readTable(page) {
       if (UNFINISHED.test(score) || UNFINISHED.test(match)) continue;
       // A completed innings always reports a figure: "34 (15)", "2-23" or "dnb".
       if (!/^\d+\*?\s*\(\d+\)$|^\d+\s*[-/]\s*\d+$|^(dnb|did not bat|-)$/i.test(score)) continue;
-      out.push({ match, date, score });
+      // The last cell is a "View >" link to the match itself, carrying CREX's stable
+      // match id. It is the only thing on this page that identifies the *match*
+      // rather than the innings, which is what makes a Test's calendar days
+      // reachable — every innings of a Test is printed under the match's start date,
+      // so the match page is the only place the day can be read.
+      const href = tr.querySelector('a[href*="match-updates-"]')?.getAttribute('href') ?? '';
+      out.push({ match, date, score, href });
     }
     return out;
   });
@@ -636,7 +681,7 @@ export function parseSeriesCard(label) {
  * `score` is a batting figure "34 (15)" / "34* (15)", or a bowling figure "2-23".
  * The bowling view uses a hyphen, not the slash used elsewhere on the site.
  */
-export function parseMatchRow({ match, date, score, series }) {
+export function parseMatchRow({ match, date, score, series, href }) {
   if (!match || !score) return null;
 
   const vs = match.match(/\bvs\s+(.+)$/i);
@@ -651,6 +696,16 @@ export function parseMatchRow({ match, date, score, series }) {
     team: series?.playedFor ?? null,
     source: 'crex',
   };
+
+  // The match id, where the row carried a link. Multi-day formats need it to find
+  // which calendar day an innings belongs to; for everything else it is simply a
+  // stable key for the match.
+  const mid = String(href ?? '').match(/match-updates-([A-Za-z0-9]+)/);
+  if (mid) row.matchId = mid[1];
+  // "1st Inn" / "2nd Inn" distinguishes the two innings of one Test for one player,
+  // and is the only part of the fixture string that varies between them.
+  const inn = match.match(/,\s*(\d)(?:st|nd|rd|th)\s*Inn/i);
+  if (inn) row.innings = +inn[1];
 
   const bat = score.match(/^(\d+)(\*?)\s*\((\d+)\)$/);
   if (bat) {

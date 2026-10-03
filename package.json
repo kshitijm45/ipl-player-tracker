@@ -11,7 +11,9 @@
     "scrape": "node src/ingest-crex.js",
     "fixtures": "node src/ingest-fixtures.js",
     "build": "node src/build-index.js && node src/bundle-site.js",
-    "refresh": "npm run scrape && npm run fixtures && npm run build"
+    "refresh": "npm run scrape && npm run fixtures && npm run build",
+    "backfill": "node src/backfill-test-days.js",
+    "test": "node --test src/**/*.test.js"
   },
   "license": "MIT",
   "dependencies": {

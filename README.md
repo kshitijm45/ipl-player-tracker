@@ -71,6 +71,97 @@ data rather than an error:
 
 Both were caught by a count that did not add up, not by a check in the code.
 
+## Search
+
+The box in the rail is a **player picker**, not a filter. It used to narrow `S.q`
+across every view at once, which meant typing a name silently emptied the daily
+tracker, Coming Up, Form and the leaderboards — a reader looking up Kohli got one
+innings and a "Nothing. Try another filter." Scoping belongs to the club rail; search
+offers people to open.
+
+It matches on more than the display name, because the other spellings were in the data
+and unreachable: the register's `registerName` ("MD Shanaka" for Dasun Shanaka), the
+squad sheet's `listedAs`, the CREX slug, the player's teams and his competitions. So
+"CSK", "Hundred" and "Duleep" are all routes to a player, and a hit explains itself
+when the name alone does not ("also MD Shanaka").
+
+Results are ranked rather than filtered. `includes` on its own buried the obvious
+answer — "sam" returned Abdul Samad and Sameer Rizvi above Sam Curran, in whatever
+order the squad list happened to be in. Exact name beats word-prefix beats substring
+beats an alternate spelling beats a team or competition, and ties break on who played
+most recently. Arrow keys walk the list, Enter opens the top hit, Escape clears.
+
+## Dating a Test innings
+
+CREX stamps every innings of a Test with the match's **start** date. All four innings
+of a Test beginning on 23 August are printed under the 23rd, which for a daily tracker
+is the wrong shape entirely: 55 of that day's 72 innings were Test innings really
+spread across five days, and the four days behind it showed nothing.
+
+There is no per-innings date anywhere on CREX to fix that with. The scorecard was
+checked for day, session, stumps and fall-of-wicket markers and carries none. What the
+*match* page carries, **while the match is being played**, is a structured day marker:
+
+```html
+<div class="day-session"><span>Day 3</span><span>-</span><span>Session 3</span></div>
+```
+
+plus a JSON-LD `SportsEvent` with `startDate`, `endDate` and status. Together those
+date a day exactly — `startDate + (day - 1)` — and the label is preferred over that
+arithmetic because it is the only thing that knows about a day lost to rain: if the
+page says Day 3 but four days have passed, a day was washed out.
+
+So each innings is shown **once, on the day it ended, with the whole figure CREX
+prints**. A batsman 51\* overnight who is dismissed for 126 appears as `126 (131)` on
+the day he was out, noted `Days 2–3`. While the innings is still in progress it shows
+the running figure badged `TEST IN PROGRESS`, and moves to its closing day once it
+ends. An earlier version split the innings across days by subtraction ("+75 on day
+3"); it was arithmetically sound and read as nonsense, because a hundred is a hundred
+and no scorecard agrees with a figure that exists only here. **Only the date is
+inferred. Every figure is CREX's own.**
+
+### Which day did an innings end on
+
+**The last day its figure changed.** The job runs daily and a day is only recorded once
+its play is finished, so every snapshot is a settled end-of-day figure: one that has
+stopped moving has stopped for good. No dismissal is needed to anchor it, which is what
+makes a declaration work — a batsman left 112\* has no "out" to look for, and comparing
+days finds the right one anyway.
+
+Two things that rule cannot do on its own, both covered by `src/sources/crex-commentary.js`:
+
+- **Date the 393 Test innings scraped before any of this existed.** There are no
+  snapshots for them and the day marker is long gone.
+- **Survive a missed run.** A day never observed is a day the comparison cannot reason
+  about, so one CI failure — or a Test that starts and finishes between two runs —
+  would leave an innings a day out, with nothing marking it as suspect.
+
+CREX's own front-end fetches a commentary feed whose every entry carries a millisecond
+timestamp and an `inning` number, so the latest timestamp per innings *is* its closing
+day — stated outright, and re-readable long after the match:
+
+```
+ENG v PAK 2nd Test, started 27 Aug
+  innings 1: 28 Aug           -> ended 28 Aug
+  innings 2: 28, 29, 30 Aug   -> ended 30 Aug
+  innings 3: 30 Aug           -> ended 30 Aug
+```
+
+That is a Test five weeks finished, fully resolved: 208 pages, ~2,000 entries, 18
+seconds. `npm run backfill` walks every Test already in the data, probing one page
+first because coverage is per match rather than per tier — the Irani Cup has a feed,
+BAN-A v SA-A does not. It is re-runnable: a settled match is skipped, so an interrupted
+backfill resumes.
+
+The feed is a third-party host (`content.crickapi.com`) reached by replaying the headers
+CREX's front-end sends, including a static build-time JWT tied to no account. It is the
+same data CREX serves itself, but it is not a documented API, so every failure is soft:
+an innings that cannot be dated keeps the match start date, and the build never fails
+on it.
+
+`data/crex-match-days.json` is committed because it holds the dated result. With the
+commentary feed it can mostly be rebuilt; without it, a day never recorded is gone.
+
 ## Live matches
 
 A figure from a match still being played is the score on the board when the page was
@@ -108,6 +199,7 @@ line-up rather than two.
 ```
 src/
   sources/crex.js       the scraper: card walk, format tabs, live detection
+  sources/crex-match-day.js  dating a Test innings  (tests: crex-match-day.test.js)
   ingest-crex.js        drives it across every pinned player, caches to disk
   ingest-fixtures.js    the next two days, with squads
   build-index.js        flattens everything into the site payload
@@ -115,6 +207,7 @@ src/
   core/registry.js      identity resolution      (tests: registry.test.js)
   core/squads.js        squad membership and the tracked set
   core/merge.js         assembles rows; deliberately does not second-guess them
+  core/match-days.js    the multi-day snapshot store
   core/display-name.js  "MD Shanaka" -> "Dasun Shanaka"
 site/
   offseason.html        the page, with an empty data stub
@@ -122,6 +215,7 @@ site/
 data/
   crex-players.json     slug + franchise per player — the identity contract
   crex-performances.json  every scraped innings
+  crex-match-days.json  which day each Test innings ended on; cannot be rebuilt
   squads-2026.json      IPL squads, transcribed
   raw/people.csv        name register
   cache/crex/           scraped pages (gitignored, ~1.4 GB)
@@ -137,7 +231,14 @@ npm run scrape     # every pinned player's CREX page   (~90 min cold, seconds wa
 npm run fixtures   # the next two days, with squads    (~2 min)
 npm run build      # site/data/*.json, then offseason-live.html
 npm run refresh    # all three, in order
+
+npm test           # identity resolution and Test day attribution
+npm run backfill   # one-time: date every Test innings already scraped (~20 min)
 ```
+
+`npm run backfill` is run by hand, once, after a scrape — it needs the `matchId` the
+scrape now records against each innings. `--dry` reports what it would date without
+writing, and `--limit=5` tries a few first.
 
 The scrape is incremental. A player page read within `CACHE_HOURS` is taken from
 `data/cache/crex` rather than fetched again, so a cold run costs about ninety minutes
@@ -180,6 +281,12 @@ refetches what has gone stale. It is gitignored — 1.4 GB never belongs in a re
 
 - A live figure is only as good as what CREX displays mid-innings. The LIVE badge is
   there so a reader knows not to treat it as final.
+- A Test innings is dated by day only where the match has a commentary feed or the
+  scrape watched it being played. Where neither holds — several domestic fixtures have
+  no feed — the innings keeps the match's start date, as it did before.
+- The commentary endpoint is undocumented and third-party. If it changes shape or
+  refuses traffic, day attribution degrades to comparing daily snapshots, and the
+  backfill stops working.
 - Squad files need a manual refresh after the auction and trade windows.
 - Forty players have no post-IPL cricket yet, so their pages stay empty until they play.
 - A surname collision can still mispin a player to the wrong CREX page. Two have been
