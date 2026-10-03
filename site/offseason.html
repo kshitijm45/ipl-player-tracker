@@ -1493,13 +1493,20 @@ function drawToday() {
     }${S.fmt ? ` in ${S.fmt}` : ''}. Try another filter.</span></div>`;
     return;
   }
-  // Open on the most recent day that actually has a day's worth of cricket on it.
-  // The newest date is often a single stray innings, which makes the landing view
-  // look empty when the week behind it is busy.
-  if (S.day === null) {
-    const busy = days.findIndex((d) => pick(d).length >= (S.club ? 2 : 8));
-    S.day = busy === -1 ? 0 : busy;
-  }
+  // Open on the most recent day with cricket on it.
+  //
+  // This used to skip forward to the most recent *busy* day — eight innings across
+  // all clubs, two for one club — on the reasoning that the newest date is often a
+  // single stray innings and makes the landing view look empty. That is defensible
+  // for the whole field and wrong for a single club: out of season a franchise has
+  // one or two players turning out on any given day, so picking Kolkata skipped the
+  // 30th, 27th and 24th of September for having one innings each and opened on the
+  // 20th, ten days stale, while the three more recent days were real cricket.
+  //
+  // The newest day wins now. `trail()` already stacks the days behind it, so a quiet
+  // day reads as the top of a run of form rather than as an empty page — which was
+  // the real answer to the thin-landing-view problem all along.
+  if (S.day === null) S.day = 0;
   const i = Math.min(S.day, days.length - 1);
   const day = days[i];
   const rows = pick(day).sort((a, b) => impact(b) - impact(a));
