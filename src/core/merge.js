@@ -19,9 +19,17 @@
  *     page did not say
  */
 
-/** Same innings? Same player, same day, same format. */
+/**
+ * Same innings?
+ *
+ * The fixture has to be part of this. A Test gives a player two innings on the same
+ * day, in the same format, printed as "70th Test, 1st Inn" and "70th Test, 2nd Inn";
+ * keying on player, date and format alone made them collide, and the second silently
+ * replaced the first. Mahipal Lomror lost three of his seven County Championship
+ * innings that way, and every multi-innings match in the data was halved.
+ */
 function key(r) {
-  return `${r.playerId}|${r.date}|${r.format ?? ''}`;
+  return `${r.playerId}|${r.date}|${r.format ?? ''}|${r.fixture ?? ''}`;
 }
 
 export function mergePerformances({ crexRows = [], cricsheetRows = [], today, from } = {}) {
