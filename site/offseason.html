@@ -215,18 +215,33 @@
     cursor: pointer;
     transition: background .14s var(--e), color .14s var(--e);
   }
-  .hit:hover, .hit[data-cursor="true"] { background: var(--sunk); color: var(--ink); }
-  .hit[data-cursor="true"] { box-shadow: inset 0 0 0 1px var(--line); }
+  /* Hover and the keyboard cursor both tint toward the player's franchise, so
+     moving down the list reads as moving between clubs rather than as a grey
+     highlight travelling over undifferentiated rows. */
+  .hit:hover, .hit[data-cursor="true"] {
+    background: rgba(var(--team-wash), .12);
+    color: var(--ink);
+  }
+  .hit[data-cursor="true"] { box-shadow: inset 0 0 0 1px rgba(var(--team-wash), .45); }
   .hit .crest {
     flex: none;
     width: 34px; height: 34px;
     display: grid; place-items: center;
     border-radius: 9px;
-    background: rgba(var(--team-wash), .16);
+    /* The franchise's own colour, as the rail and the daily rows use it, rather
+       than a wash of it: at 34px the abbreviation is the identity, so it needs the
+       contrast of the solid tile. */
+    background: var(--team);
+    color: var(--team-ink);
     font-size: 9.5px; font-weight: 700; letter-spacing: .02em;
-    font-family: Archivo, sans-serif;
-    color: var(--ink);
+    font-family: "Archivo Expanded", Archivo, sans-serif;
+    box-shadow: 0 2px 6px rgba(var(--team-wash), .3);
   }
+  /* A player with no franchise has no colour to borrow, and the team variables fall
+     back to black — so the tile is explicitly neutral rather than a black square. */
+  .hit[data-team=""] .crest { background: var(--sunk); color: var(--ink-3); box-shadow: none; }
+  .hit[data-team=""]:hover, .hit[data-team=""][data-cursor="true"] { background: var(--sunk); }
+  .hit[data-team=""][data-cursor="true"] { box-shadow: inset 0 0 0 1px var(--line); }
   .hit-main { min-width: 0; flex: 1; }
   .hit-main b {
     display: block;
@@ -865,8 +880,12 @@
   }
 
   /* ─── fixtures ─── */
+  /* The side a group of players is turning out for, in that side's own colour.
+     This read `var(--muted)`, which is not a variable this page defines, so the
+     label fell back to inherited body text and the two line-ups in a fixture were
+     distinguished only by position. */
   .fx-side { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
-             color: var(--muted); margin: 6px 0 3px; }
+             color: var(--ink-3); margin: 6px 0 3px; font-weight: 600; }
   .fixtures { display: flex; flex-direction: column; gap: 22px; }
   .fx-day > .eyebrow { margin-bottom: 10px; }
   .fx {
