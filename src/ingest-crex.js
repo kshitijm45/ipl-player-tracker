@@ -89,6 +89,35 @@ export const CACHE_MS = (Number(process.env.CACHE_HOURS) || 24) * 3600e3;
  */
 export const CONCURRENCY = Number(process.env.SCRAPE_CONCURRENCY) || 2;
 
+/**
+ * How long one player's page may take before the worker gives up on him.
+ *
+ * A heavy page — seven tournaments, each needing its own card selection — measures at
+ * about 75 seconds, so this is generous rather than tight. It exists because nothing
+ * else bounds a single read: Playwright's own timeouts cover individual actions, but a
+ * page that stops responding between them can hold a worker forever, and with two
+ * workers that is half the scrape stalled behind one player. The run would then sit
+ * until the job's six-hour cap with no indication which player was responsible.
+ *
+ * A player who times out is recorded as a failure, which puts him in the retry pass
+ * rather than dropping him silently.
+ */
+export const PLAYER_TIMEOUT_MS = Number(process.env.PLAYER_TIMEOUT_MS) || 300e3;
+
+/** Reject if `p` has not settled within `ms`. The caller records which player. */
+function withTimeout(p, ms) {
+  let timer;
+  return Promise.race([
+    p.finally(() => clearTimeout(timer)),
+    new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`timed out after ${Math.round(ms / 1000)}s`)),
+        ms
+      );
+    }),
+  ]);
+}
+
 export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, season = 2026, since = POST_IPL } = {}) {
   const file = JSON.parse(readFileSync(CREX_PATH, 'utf8'));
   const pins = file.pins ?? {};
@@ -114,6 +143,7 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
   const results = { ...existing.byPlayer };
   let done = 0;
   let failed = 0;
+  const t0 = Date.now();
   const failures = [];
 
   // A pool of workers, each with its own page, walking the same queue.
@@ -124,7 +154,10 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
     while (queue.length) {
       const [playerId, pin] = queue.shift();
       try {
-        const rows = await source.fetchMatches(pin.slug, { maxAgeMs: CACHE_MS, since });
+        const rows = await withTimeout(
+          source.fetchMatches(pin.slug, { maxAgeMs: CACHE_MS, since }),
+          PLAYER_TIMEOUT_MS
+        );
         results[playerId] = rows
           .map((r) => ({
             ...r,
@@ -142,11 +175,34 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
         failures.push({ playerId, slug: pin.slug, error: String(err?.message ?? err).slice(0, 120) });
         failed++;
       }
-      if ((done + failed) % 10 === 0) {
-        process.stdout.write(`\r  ${done + failed}/${entries.length} (${failed} failed)`);
-        flush(results);
-      }
+      report(pin.slug);
     }
+  }
+
+  /**
+   * Progress, on every player rather than every tenth.
+   *
+   * The old line printed only when the count hit a multiple of ten, which with two
+   * workers finishing at unrelated moments meant the tail usually skipped its last
+   * multiple and printed nothing again: a healthy run sat on "240/256" for the final
+   * ten minutes and looked wedged. Reporting each completion costs nothing and makes
+   * the difference between slow and stuck visible.
+   *
+   * Written as a whole line with a newline, not `\r`, because CI captures a log file
+   * rather than a terminal: a carriage return leaves one unterminated line that
+   * appears frozen until the step ends. The player's slug is included so a run that
+   * does stall names what it stalled on.
+   */
+  function report(slug) {
+    const n = done + failed;
+    const pct = Math.round((n / entries.length) * 100);
+    const ago = Math.round((Date.now() - t0) / 1000);
+    process.stdout.write(
+      `  ${n}/${entries.length} (${pct}%, ${failed} failed, ${ago}s) ${slug}\n`
+    );
+    // The partial result is still written every tenth player: a flush is a full
+    // rewrite of the output file, and doing that 256 times is wasted work.
+    if (n % 10 === 0) flush(results);
   }
 
   await Promise.all(Array.from({ length: concurrency }, (_, i) => worker(i)));
