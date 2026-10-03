@@ -104,6 +104,21 @@ export const CONCURRENCY = Number(process.env.SCRAPE_CONCURRENCY) || 2;
  */
 export const PLAYER_TIMEOUT_MS = Number(process.env.PLAYER_TIMEOUT_MS) || 300e3;
 
+/**
+ * How much of a live match's commentary the daily scrape reads.
+ *
+ * The feed is ordered newest-first, so the current day's play sits in the first few
+ * pages and that is all this needs: it is settling which day the innings being played
+ * belongs to, not reconstructing the match. Thirty pages is ~300 entries, comfortably
+ * more than a day's commentary.
+ *
+ * Reading the whole feed instead cost eight silent minutes on a run that had already
+ * finished scraping — ~200 pages for every Test in the data, re-read daily, for days
+ * that had not changed since the match ended. The unbounded walk belongs to the
+ * backfill, which runs once per match.
+ */
+export const LIVE_FEED_PAGES = Number(process.env.LIVE_FEED_PAGES) || 30;
+
 /** Reject if `p` has not settled within `ms`. The caller records which player. */
 function withTimeout(p, ms) {
   let timer;
@@ -306,11 +321,20 @@ async function recordMatchDays(source, byPlayer) {
   let commentaryDated = 0;
   let noFeed = 0;
 
+  let n = 0;
   for (const [matchId, rows] of byMatch) {
+    n++;
     // A match settled by its commentary feed is final: the feed does not change once
     // the match is over, so it is read once per match ever.
+    //
+    // "Settled" is only trusted for a match the store also recorded as finished. A
+    // run that marked a live match settled would otherwise freeze it forever: the
+    // skip here means it is never re-read, so its figures stop updating and its
+    // TEST IN PROGRESS badge never appears. The Irani Cup Test was stored as
+    // `status: Live, settled: true` by an earlier build and went stale exactly that
+    // way, which no amount of re-running would have fixed.
     const known = Object.values(store.rows).find((x) => x.matchId === matchId);
-    if (known?.settled) continue;
+    if (known?.settled && known?.status === 'Finished') continue;
 
     const meta = await source.fetchMatchDay(matchId, { maxAgeMs: 0 });
     const capturable = stillCapturable(meta);
@@ -321,9 +345,31 @@ async function recordMatchDays(source, byPlayer) {
     // label only says which day the *match* is on and is deleted when the match ends,
     // so inferring a closing day from it requires every scheduled run to have landed
     // — and one missed run would freeze an innings at its overnight figure forever.
-    const feed = await settleFromCommentary(matchId);
+    //
+    // The walk is capped here, though, and that cap is the difference between a
+    // scrape that takes twelve minutes and one that takes twenty. A full feed is
+    // ~200 pages and ~18 seconds, and doing that for every Test in the data adds
+    // eight silent minutes to every run for information that does not change.
+    //
+    // Only the newest pages are needed to settle a match in progress: the feed is
+    // ordered newest-first, so today's play is at the front. Anything older is the
+    // backfill's job, which is where the unbounded walk belongs.
+    // A match seen for the first time gets the full walk even while live, because
+    // there is no snapshot history to date its earlier innings from: an innings that
+    // closed on day 2 would otherwise be recorded against today. Once the store has
+    // days for it, the capped read is enough — the history supplies the rest.
+    const firstSight = !known;
+    const feed = await settleFromCommentary(matchId, {
+      maxPages: capturable ? (firstSight ? undefined : LIVE_FEED_PAGES) : 0,
+    });
     if (feed?.dated) commentaryDated++;
     else if (feed === null) noFeed++;
+
+    process.stdout.write(
+      `  match ${n}/${byMatch.size} ${matchId}` +
+        ` ${capturable ? 'live' : 'finished'}` +
+        `${feed?.dated ? ', dated' : feed === null ? ', no feed' : ''}\n`
+    );
 
     for (const r of rows) {
       const innings = r.innings ?? 1;
@@ -417,10 +463,13 @@ function dayNumber(startDate, date) {
  * failure is soft: the caller falls back to the live label, and an innings that
  * cannot be dated keeps the match start date, exactly as before this existed.
  */
-async function settleFromCommentary(matchId) {
+async function settleFromCommentary(matchId, { maxPages } = {}) {
   try {
     if (!(await hasFeed(matchId))) return null;
-    const r = await inningsDays(matchId);
+    // `maxPages: 0` means do not walk at all — the match is finished, so its days are
+    // the backfill's business and the daily scrape has nothing to add.
+    if (maxPages === 0) return undefined;
+    const r = await inningsDays(matchId, maxPages ? { maxPages } : {});
     return { ...r, dated: Object.keys(r.endedOn).length > 0 };
   } catch {
     return undefined;

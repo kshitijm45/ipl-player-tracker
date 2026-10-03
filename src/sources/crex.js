@@ -307,7 +307,7 @@ export class CrexSource extends Source {
 
           for (const r of await readTable(page)) {
             const series = seriesForDate(windows, r.date);
-            const row = parseMatchRow({ ...r, series });
+            const row = parseMatchRow({ ...r, series, discipline });
             if (!row) continue;
             if (figureMayBeLive(row, today)) row.provisional = true;
             // Without a tournament the row cannot be placed or dated; drop it
@@ -315,7 +315,7 @@ export class CrexSource extends Source {
             if (!row.competition) continue;
             const k = `${row.fixture}|${row.date}`;
             // Batting and bowling arrive as separate rows for one innings.
-            collected.set(k, { ...(collected.get(k) ?? {}), ...row });
+            collected.set(k, mergeViews(collected.get(k), row));
           }
         }
       }
@@ -472,14 +472,16 @@ export class CrexSource extends Source {
               // designed for: a county season runs Apr 3 - Sep 27 and therefore
               // contains every touring date inside it, so Will Jacks's England ODIs
               // against Sri Lanka came back as "County Div-One 2026", played for SUR.
-              const row = parseMatchRow({ ...r, series: w });
+              // The card walk selects cards from the Batting view (above), so every
+              // figure it reads is a batting one.
+              const row = parseMatchRow({ ...r, series: w, discipline: 'Batting' });
               if (!row?.competition) continue;
               // A match still being played can print a figure that is not the
               // player's final one for the innings — the score on the board at the
               // moment the page was read. Mark it so the next run replaces it.
               if (figureMayBeLive(row, today)) row.provisional = true;
               const k = `${row.fixture}|${row.date}`;
-              collected.set(k, { ...(collected.get(k) ?? {}), ...row });
+              collected.set(k, mergeViews(collected.get(k), row));
             }
           }
         } catch {
@@ -651,6 +653,32 @@ async function readTable(page) {
 }
 
 /**
+ * Fold a row from one discipline view into what the other already produced.
+ *
+ * One innings is read twice — once under Batting, once under Bowling — and each view
+ * knows only its own half. A plain spread let whichever ran last overwrite the other's
+ * figure, which is how a bowling figure ended up in `batting`: the key is
+ * `fixture|date`, and CREX dates every innings of a Test to the match's start, so the
+ * two views of two innings all collide on one key.
+ *
+ * Each half is therefore only ever filled in, never replaced, and the scalar fields
+ * come from whichever row carried them.
+ */
+function mergeViews(existing, row) {
+  if (!existing) return row;
+  const out = { ...existing, ...row };
+  // A figure already read stays; a view that has nothing to say about a discipline
+  // must not blank what the other view found.
+  out.batting = existing.batting ?? row.batting ?? undefined;
+  out.bowling = existing.bowling ?? row.bowling ?? undefined;
+  if (!out.batting) delete out.batting;
+  if (!out.bowling) delete out.bowling;
+  // Provisional is a property of the match, so either view observing it is enough.
+  if (existing.provisional || row.provisional) out.provisional = true;
+  return out;
+}
+
+/**
  * A tournament card reads "IPL 2026Mar 28 - May 31Played for RR".
  * The competition name and the side the player turned out for both matter: the
  * latter is how a franchise is attached to an innings.
@@ -681,7 +709,7 @@ export function parseSeriesCard(label) {
  * `score` is a batting figure "34 (15)" / "34* (15)", or a bowling figure "2-23".
  * The bowling view uses a hyphen, not the slash used elsewhere on the site.
  */
-export function parseMatchRow({ match, date, score, series, href }) {
+export function parseMatchRow({ match, date, score, series, href, discipline }) {
   if (!match || !score) return null;
 
   const vs = match.match(/\bvs\s+(.+)$/i);
@@ -707,8 +735,16 @@ export function parseMatchRow({ match, date, score, series, href }) {
   const inn = match.match(/,\s*(\d)(?:st|nd|rd|th)\s*Inn/i);
   if (inn) row.innings = +inn[1];
 
+  // Which view produced this figure, where the caller knows. The Bowling view prints
+  // "N (M)" for a bowler's economy as well as "W-R" for his wickets, and the two
+  // shapes are indistinguishable from the batting equivalents. Without this, a
+  // bowler's figure was stored as a batting innings: Mukesh Choudhary's 5-78 in the
+  // Irani Cup also appeared as "78 (114)" — a score he never made, with the 78 being
+  // the runs he conceded. He actually batted 2 (14) and 9* (47).
+  const bowlingView = /^bowl/i.test(String(discipline ?? ''));
+
   const bat = score.match(/^(\d+)(\*?)\s*\((\d+)\)$/);
-  if (bat) {
+  if (bat && !bowlingView) {
     row.batting = { runs: +bat[1], out: bat[2] !== '*', balls: +bat[3] };
     return row;
   }
@@ -719,6 +755,11 @@ export function parseMatchRow({ match, date, score, series, href }) {
     row.bowling = { wickets: +bowl[1], runs: +bowl[2] };
     return row;
   }
+
+  // An "N (M)" figure from the Bowling view is not an innings. It is read but kept
+  // out of `batting`, so a later Batting-view row for the same innings can supply the
+  // real figure rather than finding the slot already taken.
+  if (bat && bowlingView) return row;
 
   if (/^(dnb|did not bat|-)$/i.test(score)) return row;
 

@@ -243,8 +243,6 @@
   /* Why a player matched, when it was not his display name that did it. */
   .hit-main i { font-style: normal; color: var(--ink-2); }
   .hit mark { background: none; color: var(--gold); font-weight: 700; }
-  .hit-fig { flex: none; text-align: right; font-size: 11.5px; color: var(--ink-3); }
-  .hit-fig b { display: block; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
   .seek-none {
     padding: 10px 14px 16px;
@@ -1369,9 +1367,6 @@ function drawHits() {
           <b>${mark(p.name, folded)}</b>
           <span>${sub || '&nbsp;'}</span>
         </span>
-        <span class="hit-fig">${p.innings
-          ? `<b>${p.runs}</b>${p.wickets ? `${p.wickets}w` : 'runs'}`
-          : '<b>—</b>yet to play'}</span>
       </button>`;
     }).join('')}`;
 

@@ -51,13 +51,19 @@ export function observe(store, { playerId, matchId, innings, day, date, batting,
   const row = recordSnapshot(store.rows[k], { day, date, batting, bowling, provisional });
   // Match-level facts travel on the row so the build does not need the store and the
   // match cache both.
-  store.rows[k] = {
+  const next = {
     ...row,
     playerId,
     matchId,
     innings: innings ?? 1,
     ...(meta ?? {}),
   };
+  // A match still being played is never settled, whatever the caller passed. The two
+  // together are contradictory, and the contradiction is self-perpetuating: the scrape
+  // skips a settled match, so one bad write stops it ever being read again and the
+  // figures freeze mid-match.
+  if (next.settled && next.status && next.status !== 'Finished') next.settled = false;
+  store.rows[k] = next;
   return store;
 }
 

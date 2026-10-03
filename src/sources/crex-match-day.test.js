@@ -352,3 +352,37 @@ test('the two innings of one Test are dated independently', () => {
   assert.equal(b.date, '2026-10-04');
   assert.equal(b.batting.runs, 20);
 });
+
+/* ── the store must not contradict itself ──
+   A live match marked settled is self-perpetuating: the scrape skips a settled match,
+   so it is never re-read, its figures stop updating and its TEST IN PROGRESS badge
+   never appears. The Irani Cup Test was stored `status: Live, settled: true` and went
+   stale exactly that way. */
+
+test('a live match cannot be stored as settled', async () => {
+  const { observe, expand } = await import('../core/match-days.js');
+  const store = { rows: {} };
+  observe(store, {
+    playerId: 'P', matchId: '13Q7', innings: 2, day: 3, date: '2026-10-03',
+    batting: { runs: 126, balls: 131, out: false },
+    provisional: true,
+    // A caller that gets this wrong must not be able to poison the store.
+    meta: { status: 'Live', settled: true, format: 'Test', startDate: '2026-10-01' },
+  });
+  const row = Object.values(store.rows)[0];
+  assert.equal(row.status, 'Live');
+  assert.equal(row.settled, false);
+  // And the badge survives to the built row.
+  assert.equal(expand(store)[0].provisional, true);
+});
+
+test('a finished match keeps its settled flag', async () => {
+  const { observe } = await import('../core/match-days.js');
+  const store = { rows: {} };
+  observe(store, {
+    playerId: 'P', matchId: 'VSO', innings: 1, day: 2, date: '2026-08-28',
+    batting: { runs: 80, balls: 150, out: true },
+    meta: { status: 'Finished', settled: true, format: 'Test', startDate: '2026-08-27' },
+  });
+  assert.equal(Object.values(store.rows)[0].settled, true);
+});
