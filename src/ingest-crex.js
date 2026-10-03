@@ -77,7 +77,23 @@ export const POST_IPL = process.env.SEASON_START ?? '2026-06-01';
  * player once a day, while a re-run on the same day reuses what is already cached
  * rather than spending another ninety minutes on CREX.
  */
-export const CACHE_MS = (Number(process.env.CACHE_HOURS) || 24) * 3600e3;
+export const CACHE_MS = cacheMs(process.env.CACHE_HOURS);
+
+/**
+ * `CACHE_HOURS` in milliseconds, where 0 means "do not use the cache at all".
+ *
+ * This was `(Number(process.env.CACHE_HOURS) || 24) * 3600e3`, and `Number('0')` is
+ * falsy — so setting it to 0 to force a full re-read silently produced 24 hours, the
+ * exact opposite. Every run launched with `full_rescrape=true` was served from cache,
+ * which is why four separate scrapes "with a cold cache" kept reproducing the same
+ * stale rows and why fixes verified locally appeared not to work in CI.
+ *
+ * `readCache` already treats 0 correctly; it just never saw it.
+ */
+export function cacheMs(hours) {
+  const n = Number(hours);
+  return Number.isFinite(n) && String(hours ?? '').trim() !== '' ? n * 3600e3 : 24 * 3600e3;
+}
 
 /**
  * How many player pages are read at once.
