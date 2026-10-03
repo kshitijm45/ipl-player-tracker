@@ -250,8 +250,20 @@ export function dailyRows(row) {
   const snap = row.days[endDay];
   if (!snap) return [];
 
-  const batted = snap.batting && (snap.batting.balls || snap.batting.runs);
-  const bowled = snap.bowling && (snap.bowling.wickets || snap.bowling.runs);
+  // The figure comes from the most recent reading, which is not always the day the
+  // innings ended on. A later run can correct an earlier day's snapshot — Manav
+  // Suthar's first Irani Cup innings was recorded as a buggy "32 (54)" and later read
+  // correctly as "2 (13)" — and the newest reading is the one to trust. The *day*
+  // still comes from when play actually stopped, so a correction fixes the figure
+  // without moving the innings.
+  const latest = row.days[days[days.length - 1]] ?? snap;
+  const figures = {
+    batting: latest.batting ?? snap.batting ?? null,
+    bowling: latest.bowling ?? snap.bowling ?? null,
+  };
+
+  const batted = figures.batting && (figures.batting.balls || figures.batting.runs);
+  const bowled = figures.bowling && (figures.bowling.wickets || figures.bowling.runs);
   if (!batted && !bowled) return [];
 
   // A figure is still running only while the match it belongs to is. A later day
@@ -263,8 +275,8 @@ export function dailyRows(row) {
   return [{
     day: endDay,
     date: snap.date,
-    batting: snap.batting ?? null,
-    bowling: snap.bowling ?? null,
+    batting: figures.batting,
+    bowling: figures.bowling,
     // Which days the innings actually spanned, so the page can say "over days 2-3"
     // rather than implying it all happened at once.
     spanned: days.filter((d) => d <= endDay),
@@ -274,20 +286,50 @@ export function dailyRows(row) {
   }];
 }
 
-/** The last day on which either the batting or the bowling figure changed. */
+/**
+ * The last day on which either figure genuinely advanced.
+ *
+ * "Changed" is not enough, because a snapshot can change for a second reason: the
+ * scrape that wrote it was wrong, and a later run corrected it. A corrected figure
+ * looks exactly like a day's progress to a plain comparison, and it moved Manav
+ * Suthar's first Irani Cup innings onto the wrong day — a buggy `32 (54)` recorded on
+ * day 2 was replaced by the real `2 (13)` on day 3, so the innings appeared to have
+ * been added to overnight and was dated to the 3rd. He was dismissed on the 2nd.
+ *
+ * Cricket only goes forwards: runs, balls, wickets and conceded runs never decrease
+ * within an innings, and a batsman who is out cannot bat again in it. So a figure that
+ * goes *down*, or one that grows after the batsman was already dismissed, is a
+ * correction of an earlier reading rather than new play, and the day it arrived on is
+ * not the day the innings ended.
+ */
 function lastDayThatMoved(row, days) {
   let last = days[0];
   let prev = null;
   for (const day of days) {
     const s = row.days[day];
-    const moved =
-      !prev ||
-      (s.batting?.runs ?? 0) !== (prev.batting?.runs ?? 0) ||
-      (s.batting?.balls ?? 0) !== (prev.batting?.balls ?? 0) ||
-      (s.bowling?.wickets ?? 0) !== (prev.bowling?.wickets ?? 0) ||
-      (s.bowling?.runs ?? 0) !== (prev.bowling?.runs ?? 0);
-    if (moved) last = day;
+    if (!prev) { prev = s; continue; }
+
+    const advanced =
+      gained(s.batting?.runs, prev.batting?.runs) ||
+      gained(s.batting?.balls, prev.batting?.balls) ||
+      gained(s.bowling?.wickets, prev.bowling?.wickets) ||
+      gained(s.bowling?.runs, prev.bowling?.runs);
+
+    // Nothing in an innings continues after the dismissal, so a figure that grows
+    // once the batsman is out is another reading of the same innings, not more of it.
+    const wasOut = Boolean(prev.batting?.out);
+    const batOnly =
+      advanced &&
+      !gained(s.bowling?.wickets, prev.bowling?.wickets) &&
+      !gained(s.bowling?.runs, prev.bowling?.runs);
+
+    if (advanced && !(wasOut && batOnly)) last = day;
     prev = s;
   }
   return last;
+}
+
+/** Did this figure move forward? A fall is a correction, not play. */
+function gained(now, before) {
+  return (now ?? 0) > (before ?? 0);
 }

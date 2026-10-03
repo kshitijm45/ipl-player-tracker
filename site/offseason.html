@@ -532,6 +532,10 @@
     color: var(--team);
   }
   .hl-fig span { font-size: 12.5px; color: var(--ink-3); display: block; margin-top: 7px; }
+  /* The live badge on the headline card sits under the context line rather than
+     beside the figure, which is already as large as the card allows. */
+  .hl-live { margin-top: 10px; }
+  .hl-live .live-dot { margin-left: 0; }
 
   /* Performance rows */
   .rows { display: flex; flex-direction: column; gap: 10px; }
@@ -1661,14 +1665,26 @@ function figure(r) {
   return (bat + bowl || '<span class="runs nil">dnb</span>') + span + live;
 }
 
-/** "Day 3" or "Days 2–3" — where a Test innings sits within its match. */
-function spanNote(r) {
+/**
+ * "Day 3", or "Days 2–3" for an innings built over more than one day's play.
+ *
+ * Plain text, so both the row figure and the headline card can place it in their own
+ * markup rather than each deciding what a span is called.
+ */
+function spanLabel(r) {
   const d = r.spanned ?? [];
-  if (d.length > 1) {
-    const first = d[0], last = d[d.length - 1];
-    return `<span class="carried" title="Built over more than one day's play">Days ${first}–${last}</span>`;
-  }
-  return r.day ? `<span class="carried">Day ${r.day}</span>` : '';
+  if (d.length > 1) return `Days ${d[0]}–${d[d.length - 1]}`;
+  return r.day ? `Day ${r.day}` : '';
+}
+
+/** The same label, as the note that sits under a row's figure. */
+function spanNote(r) {
+  const text = spanLabel(r);
+  if (!text) return '';
+  const multi = (r.spanned ?? []).length > 1;
+  return `<span class="carried"${
+    multi ? ' title="Built over more than one day\'s play"' : ''
+  }>${esc(text)}</span>`;
 }
 
 function bigRow(r, p) {
@@ -1680,11 +1696,22 @@ function bigRow(r, p) {
       ? { v: `${w.wickets}/${w.runs}`, l: w.overs ? `in ${w.overs} overs` : 'wickets' }
       : { v: b ? `${b.runs}` : '—', l: b ? `off ${b.balls}` : 'did not bat' };
 
+  // The day a Test innings belongs to, and whether it is still being added to.
+  // `figure()` carries both for the smaller rows; this card builds its own figure
+  // display and so needs them too — without which the day's leading performance was
+  // the one place a live Test innings looked like a finished result.
+  const day = r.multiDay ? spanLabel(r) : '';
+  const live = r.provisional
+    ? '<span class="live-dot" title="Test match still in progress">TEST IN PROGRESS</span>'
+    : '';
+
   return `<button class="headline" data-team="${esc(c)}" data-id="${esc(r.playerId)}">
     <div>
       <div class="eyebrow">Performance of the day</div>
       <div class="hl-name">${esc(p?.name ?? r.name)}</div>
-      <div class="hl-ctx"><b>${esc(c || '—')}</b> · ${esc(comp(r.competition))} · ${esc(sides(r))}</div>
+      <div class="hl-ctx"><b>${esc(c || '—')}</b> · ${esc(comp(r.competition))} · ${esc(sides(r))}${
+        day ? ` · ${esc(day)}` : ''}</div>
+      ${live ? `<div class="hl-live">${live}</div>` : ''}
     </div>
     <div class="hl-fig"><b>${lead.v}</b><span>${lead.l}</span></div>
   </button>`;

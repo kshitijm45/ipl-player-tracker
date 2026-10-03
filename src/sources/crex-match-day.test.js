@@ -386,3 +386,59 @@ test('a finished match keeps its settled flag', async () => {
   });
   assert.equal(Object.values(store.rows)[0].settled, true);
 });
+
+/* ── corrections ──
+   A snapshot can change for a reason other than play: the scrape that wrote it was
+   wrong and a later run corrected it. Manav Suthar's first Irani Cup innings was
+   stored as "32 (54)" by a buggy parse and later read correctly as "2 (13)", which a
+   plain comparison read as an overnight advance and dated to the wrong day. */
+
+test('a corrected figure does not move the innings to a later day', () => {
+  let row;
+  row = recordSnapshot(row, {
+    day: 2, date: '2026-10-02',
+    batting: { runs: 32, balls: 54, out: true },
+    bowling: { wickets: 0, runs: 32 },
+  });
+  row = recordSnapshot(row, {
+    day: 3, date: '2026-10-03',
+    batting: { runs: 2, balls: 13, out: true },
+    bowling: { wickets: 0, runs: 32 },
+    provisional: true,
+  });
+
+  const r = dailyRows(row)[0];
+  // He was dismissed on the 2nd, so that is where the innings belongs.
+  assert.equal(r.date, '2026-10-02');
+  assert.equal(r.day, 2);
+  // And the figure is the corrected reading, not the one it replaced.
+  assert.deepEqual(r.batting, { runs: 2, balls: 13, out: true });
+  assert.deepEqual(r.bowling, { wickets: 0, runs: 32 });
+});
+
+test('a figure cannot grow after the batsman is out', () => {
+  // Another reading of the same innings, not more of it.
+  let row;
+  row = recordSnapshot(row, { day: 2, date: '2026-10-02', batting: { runs: 40, balls: 80, out: true } });
+  row = recordSnapshot(row, { day: 3, date: '2026-10-03', batting: { runs: 44, balls: 86, out: true } });
+  const r = dailyRows(row)[0];
+  assert.equal(r.date, '2026-10-02');
+  assert.equal(r.batting.runs, 44);
+});
+
+test('a bowler adding wickets after the batsman is out still advances the day', () => {
+  // He was dismissed on day 2 but bowled on day 3: the row belongs to day 3, because
+  // bowling is real new play rather than a re-reading.
+  let row;
+  row = recordSnapshot(row, {
+    day: 2, date: '2026-10-02',
+    batting: { runs: 20, balls: 40, out: true }, bowling: { wickets: 1, runs: 30 },
+  });
+  row = recordSnapshot(row, {
+    day: 3, date: '2026-10-03',
+    batting: { runs: 20, balls: 40, out: true }, bowling: { wickets: 4, runs: 72 },
+  });
+  const r = dailyRows(row)[0];
+  assert.equal(r.date, '2026-10-03');
+  assert.deepEqual(r.bowling, { wickets: 4, runs: 72 });
+});
