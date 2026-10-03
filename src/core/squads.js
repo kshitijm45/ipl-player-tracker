@@ -103,6 +103,24 @@ export function resolveSquads({
         });
       }
       const rec = members.get(id);
+
+      // A player is on one franchise's books. If a second squad listed a *different*
+      // name that happened to resolve here, the resolution is wrong, not the player
+      // ambidextrous: "Mangesh Yadav" at Bengaluru and "Mayank Yadav" at Lucknow both
+      // landed on MP Yadav, who then appeared for both while the real Mangesh had no
+      // entry at all. Keep the first claim and report the second, rather than quietly
+      // inventing a transfer.
+      if (rec.teams.length && !rec.teams.includes(team)) {
+        if (String(rec.listedAs).toLowerCase() !== String(name).toLowerCase()) {
+          unresolved.push({
+            name,
+            team,
+            reason: `resolved to ${player.unique_name}, already listed by ${rec.teams[0]} as "${rec.listedAs}"`,
+            confidence: 'ambiguous',
+          });
+          continue;
+        }
+      }
       if (!rec.teams.includes(team)) rec.teams.push(team);
     }
   }

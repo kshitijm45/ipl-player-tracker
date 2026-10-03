@@ -60,6 +60,33 @@ export function nameSignature(name) {
  * versa. "R" and "RG" are compatible with "RG Sharma"; "RG" is not compatible with
  * "RA Sharma" (different second initial), which is what stops the 15-way collision.
  */
+/**
+ * Does the forename in `name` agree with this register entry?
+ *
+ * The register writes a player as "SS Singh" or "Shashank Singh", so either the first
+ * initial or the spelled-out forename has to line up. Used only to stop a surname-only
+ * match being rubber-stamped by squad membership.
+ */
+function forenameCompatible(name, player) {
+  const words = String(name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return true;
+  const fore = words[0].toLowerCase().replace(/[^a-z]/g, '');
+  if (!fore) return true;
+
+  const reg = String(player?.unique_name ?? '').trim();
+  const regWords = reg.split(/\s+/).filter(Boolean);
+  if (!regWords.length) return true;
+
+  const first = regWords[0];
+
+  // An initialled register entry says nothing about the spelled-out forename: the
+  // register writes Dasun Shanaka as "MD Shanaka", so comparing "dasun" against "m"
+  // would reject a correct match. Only a spelled-out forename on both sides can
+  // disagree, and that is the case this guard is for — "Swapnil" against "Shashank".
+  if (/^[A-Z]{1,3}$/.test(first)) return true;
+  return first.toLowerCase().replace(/[^a-z]/g, '') === fore;
+}
+
 function initialsCompatible(queryInitials, player) {
   const known = new Set();
   for (const alias of [player.name, player.unique_name].filter(Boolean)) {
@@ -172,10 +199,20 @@ export class PlayerRegistry {
 
     if (candidates.length > 1 && hint?.squad?.length) {
       const narrowed = candidates.filter((c) => hint.squad.includes(c.identifier));
-      if (narrowed.length === 1) {
-        return { player: narrowed[0], confidence: 'exact', reason: 'name + squad' };
+
+      // Being in the squad is not identification on its own. Where the candidates
+      // were gathered on surname alone, "Swapnil Singh" collects all thirty-one
+      // Singhs in the register, and whichever one happens to be in the pool wins —
+      // which is how Swapnil Singh resolved to Shashank Singh, and Mangesh Yadav to
+      // Mayank Yadav, each then appearing for two franchises at once while the real
+      // player had no entry at all. The forename has to agree as well.
+      const usable = narrowed.filter((c) => forenameCompatible(name, c));
+
+      if (usable.length === 1) {
+        return { player: usable[0], confidence: 'exact', reason: 'name + squad' };
       }
-      if (narrowed.length > 1) candidates = narrowed;
+      if (usable.length > 1) candidates = usable;
+      else if (narrowed.length > 1) candidates = narrowed;
     }
 
     if (candidates.length === 1) {

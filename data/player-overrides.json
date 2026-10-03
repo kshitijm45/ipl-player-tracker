@@ -176,6 +176,26 @@
       "id": "da934ee8",
       "registerName": "MK Lomror",
       "cricinfo": "853265"
+    },
+    "Shahrukh Khan": {
+      "id": "7dcb9bc9",
+      "registerName": "M Shahrukh Khan",
+      "cricinfo": "719719"
+    },
+    "Musheer Khan": {
+      "id": "d621b427",
+      "registerName": "Musheer Khan",
+      "cricinfo": "1316430"
+    },
+    "Swapnil Singh": {
+      "id": "983f2f61",
+      "registerName": "Swapnil Singh",
+      "cricinfo": "232292"
+    },
+    "Amit Kumar": {
+      "id": "e3e9f70a",
+      "registerName": "Amit Kumar",
+      "cricinfo": "601407"
     }
   },
   "unmapped": {
@@ -203,7 +223,10 @@
       "Ramandeep Singh",
       "Saurabh Dubey",
       "Prashant Solanki",
-      "Ruchit Ahir"
+      "Ruchit Ahir",
+      "Mangesh Yadav",
+      "Kuldip Yadav",
+      "Nitish Kumar Reddy"
     ]
   },
   "trustedCrexNames": {
