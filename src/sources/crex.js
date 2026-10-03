@@ -345,20 +345,30 @@ export class CrexSource extends Source {
             await page.waitForTimeout(1100);
           }
 
-          // Selecting a card is done from the Batting view. The sweep above ends on
-          // Bowling, where a pure batsman has no series list at all — which is why
-          // every card lookup was coming back missing.
-          const batTab = page.locator('text="Batting"').first();
-          if (await batTab.count()) {
-            await batTab.click({ timeout: 5000 }).catch(() => {});
-            await page.waitForTimeout(1200);
-          }
-
+          // The series list is per-discipline: a tournament a player only batted in
+          // has no card under Bowling, and one he only bowled in has none under
+          // Batting. So the card is looked for in whichever view actually holds it,
+          // rather than in a fixed one.
+          //
+          // Forcing the Batting view here fixed pure batsmen, whose list is empty
+          // under Bowling, and silently broke pure bowlers: Ravi Bishnoi's and
+          // Jasprit Bumrah's Asian Games card exists only under Bowling, so the
+          // lookup failed and the whole tournament was skipped. Neither appeared in
+          // a competition they had both played in days earlier.
           const cards = page.locator('.seriesLeftCard');
-          const labels = await cards.evaluateAll((els) =>
-            els.map((e) => (e.textContent || '').replace(/\s+/g, ' ').trim())
-          );
-          const idx = labels.findIndex((l) => l.startsWith(w.name));
+          let idx = -1;
+          for (const view of ['Batting', 'Bowling']) {
+            const tab = page.locator(`text="${view}"`).first();
+            if (await tab.count()) {
+              await tab.click({ timeout: 5000 }).catch(() => {});
+              await page.waitForTimeout(1200);
+            }
+            const labels = await cards.evaluateAll((els) =>
+              els.map((e) => (e.textContent || '').replace(/\s+/g, ' ').trim())
+            );
+            idx = labels.findIndex((l) => l.startsWith(w.name));
+            if (idx >= 0) break;
+          }
           if (idx < 0) continue;
 
           const desc = cards.nth(idx).locator('.seriesDesc').first();
