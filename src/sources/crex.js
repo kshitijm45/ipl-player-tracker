@@ -305,9 +305,12 @@ export class CrexSource extends Source {
             continue;
           }
 
-          for (const r of await readTable(page)) {
+          const table = await readTable(page);
+          // What the table holds beats which tab we think we clicked.
+          const seen = disciplineOfRows(table) ?? discipline;
+          for (const r of table) {
             const series = seriesForDate(windows, r.date);
-            const row = parseMatchRow({ ...r, series, discipline });
+            const row = parseMatchRow({ ...r, series, discipline: seen });
             if (!row) continue;
             if (figureMayBeLive(row, today)) row.provisional = true;
             // Without a tournament the row cannot be placed or dated; drop it
@@ -464,7 +467,9 @@ export class CrexSource extends Source {
               if (!active.replace(/\s+/g, ' ').trim().startsWith(w.name)) continue;
             }
 
-            for (const r of await readTable(page)) {
+            const table = await readTable(page);
+            const seen = disciplineOfRows(table) ?? discipline;
+            for (const r of table) {
               // The card that was just selected is what the panel is showing, so it
               // names the tournament outright — no date lookup is wanted here.
               //
@@ -478,7 +483,7 @@ export class CrexSource extends Source {
               // figures in the batting column for every player this walk reaches:
               // Anshul Kamboj's 0-82 in the third India-West Indies ODI was published
               // as a score of 82 (54), when he actually made 17 (9).
-              const row = parseMatchRow({ ...r, series: w, discipline });
+              const row = parseMatchRow({ ...r, series: w, discipline: seen });
               if (!row?.competition) continue;
               // A match still being played can print a figure that is not the
               // player's final one for the innings — the score on the board at the
@@ -630,6 +635,28 @@ function seriesForDate(windows, dayMonth) {
  * does not reliably belong to it — a live India–West Indies ODI came through
  * labelled "Punjab T20 2026".
  */
+/**
+ * Which discipline is this table actually showing?
+ *
+ * Read from the rows rather than taken from the tab that was clicked, because the
+ * click is not reliable: it is wrapped in `.catch(() => {})`, the panel re-renders
+ * asynchronously, and a card re-selection can land before the switch has taken
+ * effect. The loop then believes it is on Batting while the Bowling table is still on
+ * screen, and a bowler's economy figure is stored as a score he never made — Anshul
+ * Kamboj's 0-82 published as 82 (54), Mukesh Choudhary's 5-78 as 78 (114).
+ *
+ * A "W-R" figure ("0-82") only ever appears in the bowling view, so one of those in
+ * the table settles it. Its absence does not prove the opposite — a bowling table can
+ * hold nothing but economy figures — so this answers only when it is certain and
+ * leaves the caller's label to stand otherwise.
+ */
+function disciplineOfRows(rows) {
+  for (const r of rows) {
+    if (/^\d+\s*[-/]\s*\d+$/.test(String(r.score ?? '').trim())) return 'Bowling';
+  }
+  return null;
+}
+
 async function readTable(page) {
   return page.evaluate(() => {
     const UNFINISHED = /\b(live|yet to bat|innings break|stumps|rain|delay|abandon|no result|upcoming|starts|vs\s*$)\b/i;
@@ -675,6 +702,23 @@ function mergeViews(existing, row) {
   // must not blank what the other view found.
   out.batting = existing.batting ?? row.batting ?? undefined;
   out.bowling = existing.bowling ?? row.bowling ?? undefined;
+
+  // Last line of defence against a bowling economy figure landing in the batting
+  // column. When the runs in both halves are identical, one of them is the same
+  // number read twice: CREX's bowling view prints "0-82" and "82 (54)" for the same
+  // spell, and 82 runs off 54 balls alongside 82 conceded is not a coincidence a
+  // scorecard produces. The batting half is the one to drop, because the bowling
+  // half's "W-R" shape is unambiguous while "N (M)" is not.
+  //
+  // This catches the case the table-content check cannot: a bowling table holding
+  // only economy figures, with no "W-R" row to identify it by.
+  if (
+    out.batting && out.bowling &&
+    out.batting.runs === out.bowling.runs &&
+    out.bowling.runs > 0
+  ) {
+    out.batting = undefined;
+  }
   if (!out.batting) delete out.batting;
   if (!out.bowling) delete out.bowling;
   // Provisional is a property of the match, so either view observing it is enough.

@@ -48,3 +48,55 @@ test('with no discipline given, "N (M)" is still a batting innings', () => {
 test('the innings number is read off the fixture', () => {
   assert.equal(parseMatchRow({ match: 'Only Match Test, 2nd Inn', date: '1 Oct', score: '9* (47)', series, discipline: 'Batting' }).innings, 2);
 });
+
+/* ── defence in depth ──
+   The discipline label cannot be trusted on its own. The tab click is wrapped in a
+   catch, the panel re-renders asynchronously, and a card re-selection can land before
+   the switch takes effect — so the loop can believe it is on Batting while the Bowling
+   table is still on screen. That is how Anshul Kamboj's 0-82 was published as a score
+   of 82 (54) even after the label was being passed correctly. */
+
+test('a batting figure equal to the runs conceded is dropped', async () => {
+  // The signature of one number read twice: CREX's bowling view prints "0-82" and
+  // "82 (54)" for the same spell. 82 runs off 54 balls alongside exactly 82 conceded
+  // is not something a scorecard produces.
+  const { CrexSource } = await import('./crex.js');
+  const src = await import('node:fs').then((fs) =>
+    fs.readFileSync(new URL('./crex.js', import.meta.url), 'utf8'));
+  const mergeViews = new Function('return ' + src.match(/function mergeViews[\s\S]*?\n\}/)[0])();
+
+  const merged = mergeViews(
+    { bowling: { wickets: 0, runs: 82 } },
+    { batting: { runs: 82, out: true, balls: 54 } }
+  );
+  assert.equal(merged.batting, undefined);
+  assert.deepEqual(merged.bowling, { wickets: 0, runs: 82 });
+  assert.ok(CrexSource);
+});
+
+test('a genuine innings alongside a different bowling figure survives', async () => {
+  const src = await import('node:fs').then((fs) =>
+    fs.readFileSync(new URL('./crex.js', import.meta.url), 'utf8'));
+  const mergeViews = new Function('return ' + src.match(/function mergeViews[\s\S]*?\n\}/)[0])();
+
+  const merged = mergeViews(
+    { bowling: { wickets: 0, runs: 82 } },
+    { batting: { runs: 17, out: true, balls: 9 } }
+  );
+  assert.deepEqual(merged.batting, { runs: 17, out: true, balls: 9 });
+  assert.deepEqual(merged.bowling, { wickets: 0, runs: 82 });
+});
+
+test('a wicketless maiden does not erase a genuine duck', async () => {
+  // Both zero, so the runs match — but there is no figure being double-read here and
+  // nothing should be dropped. The guard only fires on a non-zero concession.
+  const src = await import('node:fs').then((fs) =>
+    fs.readFileSync(new URL('./crex.js', import.meta.url), 'utf8'));
+  const mergeViews = new Function('return ' + src.match(/function mergeViews[\s\S]*?\n\}/)[0])();
+
+  const merged = mergeViews(
+    { bowling: { wickets: 0, runs: 0 } },
+    { batting: { runs: 0, out: true, balls: 3 } }
+  );
+  assert.deepEqual(merged.batting, { runs: 0, out: true, balls: 3 });
+});
