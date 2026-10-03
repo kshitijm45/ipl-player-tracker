@@ -90,6 +90,26 @@ function unfinishedTest(row, today) {
  * empty page for a Test that is three days old. Live rows still carry `provisional`,
  * so nothing is presented as final before it is.
  */
+/**
+ * Today's date in IST, which is the clock this project runs on.
+ *
+ * UTC was wrong here, and the cost was a day of cricket. The job fires at 00:00 IST,
+ * which is 18:30 UTC the *previous* day, so for the first five and a half hours of
+ * every IST day the UTC date is still yesterday. The build therefore treated
+ * yesterday as "today" and withheld all of it as possibly still in progress: on 4
+ * October it published 7 of the 16 innings it had scraped for the 3rd, dropping a
+ * 129 (87) in the India–West Indies ODI among them.
+ *
+ * IST is the right reference because it is when the job runs and the audience this is
+ * built for reads it. A match can still be in progress somewhere at 00:00 IST — a day
+ * of Test cricket in the Caribbean, say — and that is what `provisional` is for,
+ * rather than suppressing the whole date.
+ */
+function istToday() {
+  // IST is UTC+5:30 year-round; India does not observe DST.
+  return new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+}
+
 function tooEarlyToShow(row, today) {
   const d = String(row?.date ?? '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
@@ -98,7 +118,7 @@ function tooEarlyToShow(row, today) {
 }
 
 export async function buildIndex({ from = SEASON_START, slugs } = {}) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = istToday();
   const registry = PlayerRegistry.load();
 
   // Who is on a franchise's books, and which franchise.

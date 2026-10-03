@@ -312,11 +312,13 @@ async function recordMatchDays(source, byPlayer) {
   }
   if (!byMatch.size) return { matches: 0, live: 0, observed: 0, unrecoverable: 0 };
 
-  // The scrape runs at 00:00 IST, which is mid-afternoon in England and before dawn
-  // in Australia, so "today" in UTC is the only defensible observation date: it is
-  // the day the figures were read, and the match page's own day label is what
-  // actually places them.
-  const observedOn = new Date().toISOString().slice(0, 10);
+  // The day the figures were read, on the clock this project runs on. IST rather than
+  // UTC, and for the same reason the build uses it: the scrape fires at 00:00 IST,
+  // which is 18:30 UTC the previous day, so a UTC date would call it yesterday for the
+  // first five and a half hours of every IST day and attribute a day's play to the one
+  // before it. The match page's own `Day N` label is still preferred wherever it
+  // exists; this only places an observation that has no label.
+  const observedOn = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
 
   let live = 0;
   let observed = 0;
