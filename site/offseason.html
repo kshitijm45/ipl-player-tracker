@@ -583,8 +583,29 @@
   }
   .runs.big { color: var(--pos); }
   .runs.nil { color: var(--ink-3); font-weight: 400; }
+  /* Batting demoted to the second line, because the bowling was the better
+     performance. Matches `.bowl`'s subordinate size so the two swap cleanly. */
+  .runs.sub {
+    display: block;
+    font-size: 13.5px;
+    font-weight: 400;
+    color: var(--ink-2);
+    letter-spacing: 0;
+    margin-top: 3px;
+  }
+  .runs.sub .balls { font-size: 12px; }
   .balls { font-family: "JetBrains Mono", monospace; font-size: 13px; color: var(--ink-3); font-weight: 400; }
+  /* 13.5px is the size of a *second* line, under a batting figure that leads the row
+     at 19px. A bowler who did not bat has no first line, so at 13.5px his whole
+     contribution was set in the subordinate size — a five-wicket haul rendered
+     smaller than a duck. Alone, it takes the lead size. */
   .bowl { display: block; font-family: "JetBrains Mono", monospace; font-size: 13.5px; color: var(--ink-2); margin-top: 3px; }
+  .bowl.solo {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    margin-top: 0;
+  }
   .bowl.haul { color: var(--pos); font-weight: 700; }
 
   .tag {
@@ -1659,23 +1680,36 @@ function figure(r) {
   const live = r.provisional
     ? '<span class="live-dot" title="Test match still in progress">TEST IN PROGRESS</span>'
     : '';
-  const bat = b && b.balls
-    ? `<span class="runs ${b.runs >= 50 ? 'big' : b.runs === 0 ? 'nil' : ''}">${b.runs}${b.out ? '' : '*'}<span class="balls"> (${b.balls})</span></span>`
-    : '';
+  const batted = b && b.balls;
   // A spell counts as bowled if any of its numbers are present, including a wicketless
   // one. The test was `w.balls || w.wickets`, and CREX gives neither for a bowler who
   // took nothing: no ball count is scraped at all, so Manav Suthar's 0-32 in the Irani
   // Cup Test was in the data and silently absent from the page. Conceding runs is
   // bowling, and an economical wicketless spell is a performance.
   const bowled = w && (w.balls || w.wickets || w.runs != null || w.overs);
+
+  // Whichever discipline the player actually made his mark in leads the row, at the
+  // larger size, with the other beneath it. Batting used to lead unconditionally, so
+  // an all-rounder's 4/28 sat in the subordinate line under a single off three balls.
+  //
+  // A wicket is worth twenty runs here, which is the same exchange rate `bigRow` uses
+  // to pick the day's headline performance — so a row and the headline above it never
+  // disagree about what a player is being shown for.
+  const bowlingLeads = bowled && (!batted || (w.wickets ?? 0) * 20 > (b.runs ?? 0));
+
+  const bat = batted
+    ? `<span class="runs ${bowlingLeads ? 'sub' : ''} ${b.runs >= 50 ? 'big' : b.runs === 0 ? 'nil' : ''}">${b.runs}${b.out ? '' : '*'}<span class="balls"> (${b.balls})</span></span>`
+    : '';
   const bowl = bowled
-    ? `<span class="bowl ${w.wickets >= 3 ? 'haul' : ''}">${w.overs ? `${w.overs}–${w.runs}–${w.wickets}` : `${w.wickets}/${w.runs}`}</span>`
+    ? `<span class="bowl ${bowlingLeads ? 'solo' : ''} ${w.wickets >= 3 ? 'haul' : ''}">${w.overs ? `${w.overs}–${w.runs}–${w.wickets}` : `${w.wickets}/${w.runs}`}</span>`
     : '';
   // An innings dated by this project rather than by CREX's start-date stamp. The
   // figure is the whole innings; the note says which day of the match it ended on,
   // and when it was built over more than one day.
   const span = r.multiDay ? spanNote(r) : '';
-  return (bat + bowl || '<span class="runs nil">dnb</span>') + span + live;
+  // Leading figure first, so the visual order matches the sizing.
+  const figs = bowlingLeads ? bowl + bat : bat + bowl;
+  return (figs || '<span class="runs nil">dnb</span>') + span + live;
 }
 
 /**

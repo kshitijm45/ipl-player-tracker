@@ -83,6 +83,28 @@ export function observe(store, { playerId, matchId, innings, day, date, batting,
  */
 export function expand(store) {
   const out = [];
+
+  // Whether a match is still being played is a fact about the match, so it is read
+  // once per match and applied to every innings in it.
+  //
+  // It used to come from the per-snapshot `provisional` flag, which made the badge
+  // depend on which run happened to write each row: in the Irani Cup Test, Akash
+  // Deep's innings carried TEST IN PROGRESS while Ravichandran Smaran's — same match,
+  // same day — did not, because their rows were written on different runs with
+  // different commentary state. Two players in one match cannot disagree about
+  // whether that match has finished.
+  const liveMatch = new Set();
+  // The furthest day of play the store has seen for each match, which is how far the
+  // match had got. An innings whose last day is behind that has closed.
+  const latestDay = new Map();
+  for (const row of Object.values(store.rows ?? {})) {
+    if (!row.matchId) continue;
+    if (row.status && row.status !== 'Finished') liveMatch.add(row.matchId);
+    for (const day of Object.keys(row.days ?? {}).map(Number)) {
+      if (day >= 1) latestDay.set(row.matchId, Math.max(latestDay.get(row.matchId) ?? 0, day));
+    }
+  }
+
   for (const row of Object.values(store.rows ?? {})) {
     for (const d of dailyRows(row)) {
       out.push({
@@ -104,7 +126,12 @@ export function expand(store) {
         // Which days of the match the innings ran across, so a page can say an
         // overnight hundred took two days rather than implying one session.
         spanned: d.spanned,
-        provisional: d.provisional,
+        // Still moving only if the match is unfinished *and* this innings has not
+        // closed on an earlier day. An innings that ended on day 2 of a Test still
+        // being played is a result, not a running figure.
+        provisional:
+          (liveMatch.has(row.matchId) && d.day >= (latestDay.get(row.matchId) ?? d.day)) ||
+          undefined,
         // Dated by this project rather than by CREX's own row, which is the thing
         // worth being able to distinguish later.
         multiDay: true,

@@ -472,9 +472,13 @@ export class CrexSource extends Source {
               // designed for: a county season runs Apr 3 - Sep 27 and therefore
               // contains every touring date inside it, so Will Jacks's England ODIs
               // against Sri Lanka came back as "County Div-One 2026", played for SUR.
-              // The card walk selects cards from the Batting view (above), so every
-              // figure it reads is a batting one.
-              const row = parseMatchRow({ ...r, series: w, discipline: 'Batting' });
+              // Tagged with the discipline tab this table was read under. Hardcoding
+              // "Batting" here — which an earlier version did, on the mistaken belief
+              // that the card walk only ever reads the batting view — put bowling
+              // figures in the batting column for every player this walk reaches:
+              // Anshul Kamboj's 0-82 in the third India-West Indies ODI was published
+              // as a score of 82 (54), when he actually made 17 (9).
+              const row = parseMatchRow({ ...r, series: w, discipline });
               if (!row?.competition) continue;
               // A match still being played can print a figure that is not the
               // player's final one for the innings — the score on the board at the

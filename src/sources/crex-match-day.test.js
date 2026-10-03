@@ -442,3 +442,44 @@ test('a bowler adding wickets after the batsman is out still advances the day', 
   assert.equal(r.date, '2026-10-03');
   assert.deepEqual(r.bowling, { wickets: 4, runs: 72 });
 });
+
+/* ── the badge belongs to the match ──
+   Whether a Test is still being played is a fact about the match, not about one
+   player's snapshot. Reading it from the per-run `provisional` flag made two players
+   in the same match disagree: in the Irani Cup Test, Akash Deep's innings carried
+   TEST IN PROGRESS and Ravichandran Smaran's did not, because their rows were written
+   on different runs. */
+
+test('every innings on the live day of one match is badged alike', async () => {
+  const { observe, expand } = await import('../core/match-days.js');
+  const store = { rows: {} };
+  const meta = { format: 'Test', competition: 'Irani Cup 2026', startDate: '2026-10-01', status: 'Live' };
+
+  // Closed on day 2 — a result even though the match continues.
+  observe(store, { playerId: 'SMARAN', matchId: '13Q7', innings: 1, day: 2, date: '2026-10-02',
+    batting: { runs: 68, balls: 83, out: true }, meta });
+  // Both still on the live day.
+  observe(store, { playerId: 'SMARAN', matchId: '13Q7', innings: 2, day: 3, date: '2026-10-03',
+    batting: { runs: 126, balls: 131, out: true }, meta });
+  observe(store, { playerId: 'AKASH', matchId: '13Q7', innings: 1, day: 3, date: '2026-10-03',
+    batting: { runs: 22, balls: 24, out: true }, bowling: { wickets: 3, runs: 43 }, meta });
+
+  const by = Object.fromEntries(expand(store).map((r) => [`${r.playerId}|${r.inningsNo}`, r]));
+  assert.equal(by['SMARAN|2'].provisional, true);
+  assert.equal(by['AKASH|1'].provisional, true);
+  // The innings that closed a day earlier is final.
+  assert.equal(by['SMARAN|1'].provisional, undefined);
+});
+
+test('a finished match is never badged, even from stale snapshots', async () => {
+  const { observe, expand } = await import('../core/match-days.js');
+  const store = { rows: {} };
+  const meta = { format: 'Test', competition: 'X', startDate: '2026-08-27', status: 'Finished' };
+  // `provisional: true` written by an earlier run, when the match was still live.
+  observe(store, { playerId: 'A', matchId: 'VSO', innings: 1, day: 2, date: '2026-08-28',
+    batting: { runs: 80, balls: 150, out: true }, provisional: true, meta });
+  observe(store, { playerId: 'A', matchId: 'VSO', innings: 2, day: 4, date: '2026-08-30',
+    batting: { runs: 20, balls: 30, out: true }, provisional: true, meta });
+
+  for (const r of expand(store)) assert.equal(r.provisional, undefined);
+});
