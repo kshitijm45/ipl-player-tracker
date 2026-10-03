@@ -18,6 +18,15 @@ on:
     - cron: '30 18 * * *'
   # So a refresh can be triggered by hand without waiting for the schedule.
   workflow_dispatch:
+    inputs:
+      full_rescrape:
+        description: 'Ignore the page cache and re-read every player (~90 min)'
+        type: boolean
+        default: false
+      backfill:
+        description: 'Date Test innings already scraped, from the commentary feed'
+        type: boolean
+        default: false
 
 # One refresh at a time: two runs would race on the same commit.
 concurrency:
@@ -62,12 +71,28 @@ jobs:
           SEASON_START: ${{ vars.SEASON_START || '2026-06-01' }}
           # A page read within this window is taken from cache, so the daily run
           # refetches only what has gone stale.
-          CACHE_HOURS: '20'
+          #
+          # `full_rescrape` sets it to 0, which disables the cache entirely. That is
+          # needed after the scraper starts reading a new field off the page: the
+          # cached copy predates it, and a cache hit would keep serving rows without
+          # it indefinitely. Capturing each row's match id was such a change.
+          CACHE_HOURS: ${{ inputs.full_rescrape && '0' || '20' }}
         run: npm run scrape
 
       - name: Scrape fixtures
         # Fixtures are always refetched: the whole point is what is on today.
         run: npm run fixtures
+
+      - name: Backfill Test innings dates
+        # One-time, and only when asked. Walks the commentary feed for every Test
+        # already scraped and records which day each innings ended on — the daily
+        # scrape can only date matches it watched being played.
+        #
+        # Needs the match ids the scrape records, so it runs after it. Soft by
+        # design: a match with no feed is skipped, and `|| true` keeps a refresh
+        # from failing over a one-off migration step.
+        if: ${{ inputs.backfill }}
+        run: npm run backfill || true
 
       - name: Build the site
         env:
