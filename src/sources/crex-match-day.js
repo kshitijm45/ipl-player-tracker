@@ -186,8 +186,9 @@ export function stillCapturable(meta) {
 }
 
 /* ── snapshots ──
-   One row per (player, match, innings), holding the cumulative figure seen on each
-   day. Daily contributions are the differences between consecutive days. */
+   One row per (player, match, innings), holding the figure seen on each day. The
+   sequence is what identifies the day the innings ended — the last day the figure
+   advanced — and what distinguishes a corrected reading from a day's play. */
 
 /** The key a snapshot row is stored under. */
 export const snapKey = (playerId, matchId, innings) =>

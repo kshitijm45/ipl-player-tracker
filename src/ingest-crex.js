@@ -275,19 +275,22 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
  * Date every multi-day innings that can still be dated, and record it.
  *
  * Runs once per scrape, after the player sweep. For each Test match a tracked player
- * appeared in, the match page is read for its day of play, and every innings in that
- * match is snapshotted against that day. Differencing consecutive snapshots at build
- * time is what turns "145 on the 23rd" into "+75 on the 25th".
+ * appeared in, the match page is read for its day of play and every innings in that
+ * match is snapshotted against that day. The build then shows each innings once, on
+ * the day its figure last advanced, with the whole figure CREX prints.
  *
- * Three things keep this cheap. Matches are fetched once each, not once per player —
- * twelve players in one Test is one request. The fetch is plain HTTP, because the day
- * marker is server-rendered. And a match CREX has marked finished is never re-read:
- * its cache entry is permanent, since nothing about it can change again.
+ * Four things keep this cheap. Matches are fetched once each, not once per player —
+ * twelve players in one Test is one request. The day fetch is plain HTTP, because the
+ * marker is server-rendered. A match already settled and recorded as finished is
+ * skipped outright. And the commentary walk is bounded: a finished match is not walked
+ * at all, since its days cannot change and belong to the backfill, while a live one
+ * reads only its newest pages. Walking every feed in full added eight silent minutes
+ * to every run for information that had not moved.
  *
  * What it cannot do is recover a match that finished before this ran for the first
- * time. CREX removes the day marker when a match ends, so those innings have no day
- * to find and keep the match's start date — counted as `unrecoverable` so the number
- * is visible rather than silent.
+ * time and has no commentary feed. CREX removes the day marker when a match ends, so
+ * those innings have no day to find and keep the match's start date — counted as
+ * `unrecoverable` so the number is visible rather than silent.
  */
 async function recordMatchDays(source, byPlayer) {
   const store = loadStore();

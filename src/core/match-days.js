@@ -2,14 +2,21 @@
  * The multi-day snapshot store.
  *
  * `data/crex-match-days.json` holds one row per (player, match, innings), recording
- * the cumulative figure observed on each day of play. The daily contributions the
- * site shows are differences between consecutive days, computed at build time.
+ * the figure observed on each day of play. The build reads the sequence to decide
+ * which day the innings ended on — the last day its figure advanced — and shows the
+ * innings once, on that day, with the whole figure CREX prints. The per-day snapshots
+ * exist to identify that day, not to be split into daily contributions.
+ *
+ * Keeping every day's reading rather than only the latest is also what lets a
+ * correction be told apart from a day's play: a figure that falls, or grows after the
+ * batsman was out, is a re-reading of the same innings and must not move its date.
  *
  * This file is the project's only piece of genuinely accumulated state, and that is
- * deliberate: CREX removes a Test's day marker the moment the match ends, so a day's
- * play that was not recorded while it was happening cannot be recovered. Everything
- * else here can be rebuilt from a fresh scrape; this cannot, so it is committed and
- * never rewritten wholesale.
+ * deliberate: CREX removes a Test's day marker the moment the match ends. A day of
+ * play never recorded can only be recovered where the match has a commentary feed
+ * (see `../sources/crex-commentary.js`), and several domestic fixtures have none.
+ * Everything else here can be rebuilt from a fresh scrape; this cannot, so it is
+ * committed and never rewritten wholesale.
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
