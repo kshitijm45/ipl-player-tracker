@@ -216,6 +216,12 @@
       "id": "02dfebbe",
       "registerName": "Yash Punja",
       "note": "register also lists him as Y Punja (e855edaa); that duplicate has no innings"
+    },
+    "Rasikh Dar": {
+      "id": "b8527c3d",
+      "registerName": "Rasikh Salam",
+      "cricinfo": "1161489",
+      "note": "squad lists him as Rasikh Dar; \"Dar\" otherwise matches Raza Ali Dar (42433)"
     }
   },
   "unmapped": {
@@ -244,7 +250,6 @@
       "Saurabh Dubey",
       "Prashant Solanki",
       "Ruchit Ahir",
-      "Mangesh Yadav",
       "Kuldip Yadav",
       "Aman Khan",
       "Yarra Prithviraj",

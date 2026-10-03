@@ -108,6 +108,7 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
     registry,
     squadFile: loadSquadFile(),
     appearedIds,
+    slugPins: crexSlugPins,
   });
 
   // The tracked set is the union of squad membership and actual IPL appearances:

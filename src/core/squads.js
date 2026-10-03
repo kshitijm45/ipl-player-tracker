@@ -45,11 +45,17 @@ export function resolveSquads({
   squadFile,
   appearedIds = new Set(),
   overrideFile = loadOverrides(),
+  slugPins = {},
 }) {
   const members = new Map();
   const unresolved = [];
   const overrides = overrideFile?.overrides ?? {};
   const knownUnmapped = new Set(overrideFile?.unmapped?.names ?? []);
+  // Players CREX knows but the register does not. The slug is their only identity,
+  // so they are recognised here by the exact name the squad lists them under.
+  const bySlugName = new Map(
+    Object.entries(slugPins).map(([n, pin]) => [String(n).toLowerCase(), pin])
+  );
 
   if (!squadFile?.teams) return { members, unresolved };
 
@@ -61,6 +67,29 @@ export function resolveSquads({
 
   for (const [team, names] of Object.entries(squadFile.teams)) {
     for (const name of names) {
+      // A CREX slug pin is the strongest signal there is: it names one page on the
+      // source of every figure this site shows. It has to be checked before the
+      // register, or a name the register cannot place is handed to whichever
+      // near-match the fuzzy matcher prefers — which is how "Mangesh Yadav", who has
+      // a slug of his own, kept resolving to Mayank Yadav instead.
+      const slugPin = bySlugName.get(String(name).toLowerCase());
+      if (slugPin) {
+        const key = `unmapped:${name}`;
+        if (!members.has(key)) {
+          members.set(key, {
+            id: null,
+            name,
+            listedAs: name,
+            teams: [],
+            playedIPL: false,
+            unmapped: true,
+          });
+        }
+        const rec = members.get(key);
+        if (!rec.teams.includes(team)) rec.teams.push(team);
+        continue;
+      }
+
       // A manual pin always wins: it was verified by hand and is exact.
       const pin = overrides[name];
       let player = pin ? registry.get(pin.id) : null;

@@ -2943,6 +2943,12 @@
       "code": "K12",
       "displayName": "RS Ambrish",
       "franchise": "Sunrisers Hyderabad"
+    },
+    "Mangesh Yadav": {
+      "slug": "mangesh-yadav-DSI",
+      "code": "DSI",
+      "displayName": "Mangesh Yadav",
+      "franchise": "Royal Challengers Bengaluru"
     }
   }
 }
