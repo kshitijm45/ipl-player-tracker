@@ -13,8 +13,9 @@ name: refresh
 
 on:
   schedule:
-    # 03:30 UTC = 09:00 IST, after the previous day's play has been scored.
-    - cron: '30 3 * * *'
+    # 18:30 UTC = 00:00 IST the following day, since IST is UTC+5:30. India does not
+    # observe DST, so this stays midnight year-round rather than drifting twice a year.
+    - cron: '30 18 * * *'
   # So a refresh can be triggered by hand without waiting for the schedule.
   workflow_dispatch:
 
