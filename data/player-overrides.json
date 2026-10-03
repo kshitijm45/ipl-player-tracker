@@ -222,6 +222,11 @@
       "registerName": "Rasikh Salam",
       "cricinfo": "1161489",
       "note": "squad lists him as Rasikh Dar; \"Dar\" otherwise matches Raza Ali Dar (42433)"
+    },
+    "Aman Khan": {
+      "id": "378daa89",
+      "registerName": "Aman Hakim Khan",
+      "note": "CSK list him as Aman Khan; CREX page aman-khan-274"
     }
   },
   "unmapped": {
@@ -251,7 +256,6 @@
       "Prashant Solanki",
       "Ruchit Ahir",
       "Kuldip Yadav",
-      "Aman Khan",
       "Yarra Prithviraj",
       "Wanindu Hasaranga",
       "Mohammed Izhar",
