@@ -341,7 +341,23 @@ async function recordMatchDays(source, byPlayer) {
     const known = Object.values(store.rows).find((x) => x.matchId === matchId);
     if (known?.settled && known?.status === 'Finished') continue;
 
-    const meta = await source.fetchMatchDay(matchId, { maxAgeMs: 0 });
+    // A match the store already knows is over needs no further reads. Its day marker
+    // is gone, its figures are final, and whether it has a commentary feed will not
+    // change — so re-reading it every run buys nothing. Without this, every finished
+    // Test in the data cost a request a day forever: 33 matches, of which 19 were
+    // already known to be finished and most of those had no feed to walk anyway.
+    //
+    // Deliberately not keyed on `settled`, which is only set when a feed walk
+    // completed. A finished match with no feed can never be settled, and that is
+    // exactly the case that was being re-read indefinitely.
+    if (known?.status === 'Finished') continue;
+
+    // Cached for a finished match, refetched for one in progress. `fetchMatchDay`
+    // keeps a Finished result permanently, so this only costs a request while the
+    // match can still change.
+    const meta = await source.fetchMatchDay(matchId, {
+      maxAgeMs: known?.status ? 0 : 6 * 3600e3,
+    });
     const capturable = stillCapturable(meta);
     if (capturable) live++;
 
