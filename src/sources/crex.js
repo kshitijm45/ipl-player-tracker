@@ -270,7 +270,7 @@ export class CrexSource extends Source {
             const series = seriesForDate(windows, r.date);
             const row = parseMatchRow({ ...r, series });
             if (!row) continue;
-            if (seriesStillRunning(series, today)) row.provisional = true;
+            if (figureMayBeLive(row, today)) row.provisional = true;
             // Without a tournament the row cannot be placed or dated; drop it
             // rather than attribute it to whatever was selected.
             if (!row.competition) continue;
@@ -435,10 +435,10 @@ export class CrexSource extends Source {
               // against Sri Lanka came back as "County Div-One 2026", played for SUR.
               const row = parseMatchRow({ ...r, series: w });
               if (!row?.competition) continue;
-              // A tournament still under way can print a figure that is not the
+              // A match still being played can print a figure that is not the
               // player's final one for the innings — the score on the board at the
               // moment the page was read. Mark it so the next run replaces it.
-              if (seriesStillRunning(w, today)) row.provisional = true;
+              if (figureMayBeLive(row, today)) row.provisional = true;
               const k = `${row.fixture}|${row.date}`;
               collected.set(k, { ...(collected.get(k) ?? {}), ...row });
             }
@@ -469,66 +469,60 @@ export class CrexSource extends Source {
 }
 
 /**
- * Could this cached row's figure still change?
+ * Should a cached read be thrown away and fetched again?
  *
- * True while the row is flagged provisional, and true for any row dated within the
- * last few days, because a multi-day match begun earlier in the week may still be
- * going. Being wrong here only costs one extra page load; being wrong the other way
- * freezes a half-finished score on the page for the length of the match.
+ * Yes while the row is marked provisional, and yes for a figure recent enough to
+ * still be an innings in progress — the second half matters because a row cached
+ * before the flag existed carries no flag, and would otherwise never refresh.
  */
 function mayStillChange(row, today) {
-  if (row?.provisional) return true;
-
-  // The cache holds CREX's own "1 Oct" form; the ISO conversion happens later, in
-  // the ingest. Comparing against a YYYY-MM-DD pattern here matched nothing, so every
-  // cached row looked settled and nothing ever refreshed.
-  const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const m = String(row?.date ?? '').match(/^(\d{1,2})\s+([A-Z][a-z]{2})$/);
-  if (!m) return false;
-  const mi = MON.indexOf(m[2]);
-  if (mi < 0) return false;
-
-  // The row carries no year. Take the one that puts it nearest to today, so a
-  // December row read in January is not mistaken for one eleven months away.
-  const year = +today.slice(0, 4);
-  const asDate = (y) => `${y}-${String(mi + 1).padStart(2, '0')}-${String(+m[1]).padStart(2, '0')}`;
-  const candidates = [asDate(year - 1), asDate(year), asDate(year + 1)];
-  const cutoff = new Date(Date.parse(today) - 6 * 864e5).toISOString().slice(0, 10);
-
-  // Six days covers a five-day Test and the day it finishes on.
-  return candidates.some((d) => d >= cutoff && d <= today);
+  return Boolean(row?.provisional) || figureMayBeLive(row, today);
 }
 
 /**
- * Is this tournament still being played?
+ * Might this figure still change?
  *
- * A match in progress cannot be told apart from a finished one by its row alone: the
- * table prints a well-formed figure either way, and mid-innings that figure can be
- * the team's running total rather than the player's. Mukesh Kumar's Irani Cup row
- * was read as "84 (102)" while he was in fact 0 (0) and had bowled 2-84 — the 84 was
- * the score on the board at the time, and the scrape had no way to see that from the
- * row itself.
+ * Only the match's own date decides it. Keying off the tournament's window instead
+ * marked every innings in a competition that happened to still be running, so a
+ * three-week tour flagged all forty-one of its rows — including matches played a
+ * fortnight earlier and long since finished — and the page showed LIVE against
+ * almost everything.
  *
- * The card's own window is the signal that works: a tournament whose last day has
- * not yet passed may still be producing provisional figures, so its most recent day
- * is held back until the day is over. Everything earlier in the same tournament is
- * finished and is kept.
+ * A Test can run five days, so a figure dated within that span may still be an
+ * innings in progress; anything older has been played out. One day either side of
+ * the comparison is cheap, and the cost of being wrong is one extra page load
+ * against a score frozen half-finished for days.
  */
-export function seriesStillRunning(series, today) {
-  if (!series?.to) return false;
-  const end = windowDate(series.to, series.name);
-  return end ? end >= today : false;
+export function figureMayBeLive(row, today) {
+  const d = isoFromRow(row.date, row.competition, today);
+  if (!d || d > today) return false;
+
+  // How long the figure can still move depends on the format. A limited-overs match
+  // is settled the day it is played, so only today's rows are uncertain. A Test runs
+  // to five days, and an innings begun on day one is still being added to on day
+  // four, so those stay open for the length of the match.
+  //
+  // Treating every format as multi-day flagged 95 rows, T20s from a fortnight
+  // earlier among them, and the page showed LIVE against almost everything.
+  const multiDay = /test|first class|fc|unofficial test/i.test(String(row.format ?? ''));
+  const span = multiDay ? 5 : 1;
+  const earliest = new Date(Date.parse(today) - (span - 1) * 864e5).toISOString().slice(0, 10);
+  return d >= earliest;
 }
 
-/** "Oct 5" + "Irani Cup 2026" -> "2026-10-05". */
-function windowDate(dayMonth, name) {
+/** CREX prints "1 Oct" with no year; pick the year that lands nearest to today. */
+function isoFromRow(dayMonth, competition, today) {
   const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const m = String(dayMonth ?? '').match(/^([A-Z][a-z]{2})\s+(\d{1,2})$/);
-  if (!m) return null;
-  const mi = MON.indexOf(m[1]);
-  const year = String(name ?? '').match(/(20\d{2})/)?.[1];
-  if (mi < 0 || !year) return null;
-  return `${year}-${String(mi + 1).padStart(2, '0')}-${String(+m[2]).padStart(2, '0')}`;
+  const m = String(dayMonth ?? '').match(/^(\d{1,2})\s+([A-Z][a-z]{2})$/);
+  if (!m) return /^\d{4}-\d{2}-\d{2}$/.test(String(dayMonth)) ? String(dayMonth) : null;
+  const mi = MON.indexOf(m[2]);
+  if (mi < 0) return null;
+  const day = String(+m[1]).padStart(2, '0');
+  const mon = String(mi + 1).padStart(2, '0');
+  const y = +today.slice(0, 4);
+  return [y - 1, y, y + 1]
+    .map((yy) => `${yy}-${mon}-${day}`)
+    .sort((a, b) => Math.abs(Date.parse(a) - Date.parse(today)) - Math.abs(Date.parse(b) - Date.parse(today)))[0];
 }
 
 /**
