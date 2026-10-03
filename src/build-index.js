@@ -47,7 +47,24 @@ const OUT_DIR = new URL('../site/data', import.meta.url).pathname;
 /** Competitions that are mostly associate/qualifier noise for an IPL-fan audience. */
 const DEPRIORITISED = /Qualifier|Sub Regional|Continental Cup|European Cup|Asian Games/i;
 
+/**
+ * Could this figure still change?
+ *
+ * A limited-overs match is settled the day it is played, so only today's rows are
+ * uncertain. A Test runs to five days, and an innings begun on day one is still being
+ * added to on day four, so those stay open for the length of the match.
+ */
+function stillLive(row, today) {
+  const d = String(row?.date ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d > today) return false;
+  const multiDay = /test|first class|fc/i.test(String(row?.format ?? ''));
+  const span = multiDay ? 5 : 1;
+  const earliest = new Date(Date.parse(today) - (span - 1) * 864e5).toISOString().slice(0, 10);
+  return d >= earliest;
+}
+
 export async function buildIndex({ from = SEASON_START, slugs } = {}) {
+  const today = new Date().toISOString().slice(0, 10);
   const registry = PlayerRegistry.load();
 
   // Who is on a franchise's books, and which franchise.
@@ -201,7 +218,18 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
         const named = owner ? `unmapped:${owner}` : playerId;
         // And if that name-keyed record was folded into a resolved one just above,
         // send the rows to the id that survived.
-        crexRows.push({ ...r, playerId: mergedInto.get(named) ?? named });
+        //
+        // Whether a figure is still live is decided here rather than trusted from the
+        // scrape. The scraper writes the flag at the moment it reads the page, and a
+        // player who is not refetched keeps whatever it wrote: a Test from 22
+        // September and ODIs from the 24th were still showing LIVE on 3 October,
+        // because nothing ever went back to clear them. Recomputing it every build
+        // means the badge expires on its own.
+        crexRows.push({
+          ...r,
+          playerId: mergedInto.get(named) ?? named,
+          provisional: stillLive(r, today) || undefined,
+        });
       }
     }
   }
