@@ -196,6 +196,26 @@
       "id": "e3e9f70a",
       "registerName": "Amit Kumar",
       "cricinfo": "601407"
+    },
+    "Mustafizur Rahman": {
+      "id": "0a8fce53",
+      "registerName": "Mustafizur Rahman",
+      "cricinfo": "330902"
+    },
+    "Harshit Rana": {
+      "id": "77b1aa15",
+      "registerName": "Harshit Rana",
+      "cricinfo": "1312645"
+    },
+    "Shivam Mavi": {
+      "id": "c38d3503",
+      "registerName": "Shivam Mavi",
+      "cricinfo": "1079848"
+    },
+    "Yash Punja": {
+      "id": "02dfebbe",
+      "registerName": "Yash Punja",
+      "note": "register also lists him as Y Punja (e855edaa); that duplicate has no innings"
     }
   },
   "unmapped": {
@@ -226,7 +246,16 @@
       "Ruchit Ahir",
       "Mangesh Yadav",
       "Kuldip Yadav",
-      "Nitish Kumar Reddy"
+      "Aman Khan",
+      "Yarra Prithviraj",
+      "Wanindu Hasaranga",
+      "Mohammed Izhar",
+      "Harnoor Singh",
+      "Aman Rao",
+      "Ravi Singh",
+      "Richard Gleeson",
+      "Onkar Tarmale",
+      "Jack Edwards"
     ]
   },
   "trustedCrexNames": {
