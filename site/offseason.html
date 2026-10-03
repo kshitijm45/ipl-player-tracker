@@ -1343,10 +1343,15 @@ function sides(r) {
 
 function figure(r) {
   const b = r.batting, w = r.bowling;
-  // A figure from a match still being played is the score at the moment the page was
-  // read, not the player's final one for the innings, so it is marked rather than
-  // presented as settled. The next scrape replaces it with the completed figure.
-  const live = r.provisional ? '<span class="live-dot" title="Match in progress — figure may change">LIVE</span>' : '';
+  // A Test innings that is not over: the batsman was at the crease at stumps and
+  // continues the next day, so the figure is marked rather than shown as a result.
+  // The match is still being played, not necessarily this innings: most of these
+  // batsmen are already out, and their figure will not change. What is unsettled is
+  // the match, which may yet give them another innings — so the badge names the match
+  // rather than claiming the player is still at the crease.
+  const live = r.provisional
+    ? '<span class="live-dot" title="Test match still in progress">TEST IN PROGRESS</span>'
+    : '';
   const bat = b && b.balls
     ? `<span class="runs ${b.runs >= 50 ? 'big' : b.runs === 0 ? 'nil' : ''}">${b.runs}${b.out ? '' : '*'}<span class="balls"> (${b.balls})</span></span>`
     : '';

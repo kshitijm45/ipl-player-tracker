@@ -48,19 +48,37 @@ const OUT_DIR = new URL('../site/data', import.meta.url).pathname;
 const DEPRIORITISED = /Qualifier|Sub Regional|Continental Cup|European Cup|Asian Games/i;
 
 /**
- * Could this figure still change?
+ * Is this a Test innings that will be continued tomorrow?
  *
- * A limited-overs match is settled the day it is played, so only today's rows are
- * uncertain. A Test runs to five days, and an innings begun on day one is still being
- * added to on day four, so those stay open for the length of the match.
+ * Only multi-day cricket qualifies. A limited-overs innings either has not started or
+ * is finished by the end of its own day, so a figure read during one is simply a
+ * batsman mid-over: showing it as a result would be wrong, and badging it LIVE only
+ * dresses up a number that is about to change. Those rows are dropped instead.
+ *
+ * A Test is different. A batsman 70 not out at stumps has a real figure for the day,
+ * and the reader wants it — he resumes tomorrow. So a Test row is kept and marked
+ * provisional while the match is still inside its five days.
+ *
+ * "Stumps" is approximated by the day being over, because CREX prints nothing to say
+ * a session has ended: today's Test rows are therefore held back until tomorrow,
+ * rather than captured mid-session.
  */
-function stillLive(row, today) {
+function unfinishedTest(row, today) {
   const d = String(row?.date ?? '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d > today) return false;
-  const multiDay = /test|first class|fc/i.test(String(row?.format ?? ''));
-  const span = multiDay ? 5 : 1;
-  const earliest = new Date(Date.parse(today) - (span - 1) * 864e5).toISOString().slice(0, 10);
-  return d >= earliest;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  if (!/test|first class|fc/i.test(String(row?.format ?? ''))) return false;
+  // Earlier than today (the day's play is over) but inside the match's five days.
+  const earliest = new Date(Date.parse(today) - 4 * 864e5).toISOString().slice(0, 10);
+  return d < today && d >= earliest;
+}
+
+/**
+ * A figure that cannot be shown yet: a limited-overs innings from today, which may
+ * still be being played, or a Test innings from today, whose day is not yet over.
+ */
+function tooEarlyToShow(row, today) {
+  const d = String(row?.date ?? '');
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= today;
 }
 
 export async function buildIndex({ from = SEASON_START, slugs } = {}) {
@@ -225,10 +243,14 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
         // September and ODIs from the 24th were still showing LIVE on 3 October,
         // because nothing ever went back to clear them. Recomputing it every build
         // means the badge expires on its own.
+        // A match being played right now is not reported at all: the figure in the
+        // table is a batsman mid-over, and would be replaced within minutes. Only a
+        // Test carries over, and only once the day it belongs to is finished.
+        if (tooEarlyToShow(r, today)) continue;
         crexRows.push({
           ...r,
           playerId: mergedInto.get(named) ?? named,
-          provisional: stillLive(r, today) || undefined,
+          provisional: unfinishedTest(r, today) || undefined,
         });
       }
     }
