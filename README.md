@@ -1,77 +1,130 @@
-# Beyond the IPL
+# Offseason
 
 Tracks every player on an IPL 2026 roster across every competition they appear in
-worldwide — internationals, the Big Bash, bilateral tours, qualifiers — so a fan can
-follow one player without following twenty tournaments.
+afterwards — internationals, the Hundred, county cricket, the CPL, Indian domestic —
+so a fan can follow one player without following twenty tournaments.
 
-**Live page:** https://claude.ai/artifact/9HKRwVDbnBahcwECPocBii
+**Live page:** https://kshitijm45.github.io/ipl-player-tracker/
 
-Current data: 256 players, 2,363 innings, 58 competitions, 1 Jun - 28 Sep 2026.
-All of it scraped from CREX, which is the single source.
+Current data: 255 players, 2,398 innings, 61 competitions, 1 Jun – 2 Oct 2026.
+Every figure is scraped from CREX, which is the single source.
 
-## The actual problem
+## What it does
 
-Fetching a scorecard is easy. Knowing that the `H Pandya` in an IPL scorecard, the
-`Hardik Pandya` in a T20I scorecard and the `HH Pandya` in a domestic one are the same
-person is not. Names cannot do it:
+The IPL lasts two months. Its players then scatter across the world, and no single
+page follows them. This one does: pick a franchise, see what its squad has been doing
+since the final, filtered by format, with the next two days' fixtures and who is named
+in each squad.
 
-- Three different players in the register match "Hardik".
-- `RG Sharma` (cricinfo 34102) is the India captain. `Rohit Sharma` (cricinfo 924355)
-  is a *different real player*. Text alone cannot separate them.
-- Press squad lists say "Axar Patel"; the register says `AR Patel`. "Dushmantha
-  Chameera" is filed as `PVD Chameera` — no shared token at all.
+## Where the data comes from
 
-So identity is the spine of this project, and every performance is attached to a
-canonical id, never to a name. Where identity is uncertain, the row is **quarantined
-rather than guessed** — silently crediting one player's century to another is the worst
-failure this thing can have.
+**CREX only.** It covers the long tail no free dataset reaches — Ranji, Vijay Hazare,
+TNPL, state T20 leagues — and prints players under the names fans actually use
+("Dasun Shanaka", not the register's "MD Shanaka").
 
-## How it resolves identity
+Contrary to the usual assumption, it is scrapable: the player and match pages are
+server-rendered, so the figures are in the HTML rather than behind an authenticated
+API. Players have stable slugs (`hardik-pandya-C3`), and `/player/<slug>/matches`
+carries per-innings figures split by format.
 
-1. **Cricsheet's register** (`data/raw/people.csv`, ~18.5k players) is the id space.
-   `key_cricinfo` is populated for 99.8% of players and is the practical join key.
-   (`key_cricbuzz` is 0.3% populated and deliberately unused.)
-2. **Match files carry their own registry.** Each Cricsheet match embeds
-   `info.registry.people`, mapping that match's exact name strings to canonical ids, so
-   performance extraction is *exact by construction* — no fuzzy matching on this path.
-3. **Squad lists need help.** Squad names come from public listings and rarely match
-   register spellings. Resolution runs in three stages:
-   - appearance-pool prior (players who actually played IPL 2026) — cuts failures from 37% to 15%
-   - name variants (punctuation, reordering, transliteration drift)
-   - `data/player-overrides.json` — 34 hand-verified pins for the irreducible cases
+Nothing is inferred. A competition is whatever CREX called it, an opponent is recorded
+only when the fixture names one, and a team code is never expanded into a club. Every
+transformation tried here was wrong in a way that was hard to see — "IND vs ENG 2026"
+rewritten as "England in India" when India were the tourists, opponents invented from
+tournament names — so the source is passed through unchanged.
 
-   Result: **251/251 squad names resolved**, 245 to canonical ids. The other 22 are
-   uncapped players with no Cricsheet record yet; they are carried explicitly as squad
-   members with no history rather than dropped.
+Cricsheet's register (`data/raw/people.csv`) is still read, but only as a name list:
+it turns "MD Shanaka" into the spelling a reader recognises. No innings and no squad
+membership come from it.
 
-## Why squads are a separate source
+## Reading a player's page
 
-Cricsheet records playing XIs, never full squads. A player who sat on the bench all
-season is invisible to it — and for a tracker that is backwards, since a benched IPL
-player is often exactly the one whose BBL or county form you want.
+The matches page opens on one tournament; the rest sit behind the series cards. Two
+details make that work, and both cost a long time to find:
 
-The tracked set is therefore the **union** of squad membership and actual appearances.
-57 tracked players never played an IPL match in 2026; 12 of them have been active
-elsewhere (Kamindu Mendis played 13 innings for Sri Lanka as recently as 17 Sep).
+- **Click the card's date line (`.seriesDesc`), never the series name.** The name is a
+  link to the series page, and following it abandons the table.
+- **Select cards from the Batting view, and re-select after switching discipline.**
+  The series list is per-discipline, and the discipline tab re-renders the table back
+  to the default tournament — which is how Will Jacks's England ODIs against Sri Lanka
+  ended up filed under "County Div-One 2026" for Surrey.
+
+With both right, Jos Buttler goes from 5 innings to 23 and Tilak Varma's three Duleep
+Trophy innings appear.
+
+## Identity
+
+The CREX slug is the id. `data/crex-players.json` pins every tracked player to one,
+along with the franchise he plays for, and that mapping is the contract — no name
+matching happens at scrape time.
+
+258 pin entries resolve to 255 distinct CREX pages: three players are pinned both by
+register id and by name, and the build folds each pair into one record.
+
+Two mispins are worth knowing about, because both produced plausible-looking wrong
+data rather than an error:
+
+- Rahul Chahar was pinned to his cousin Deepak's page, so his card showed Deepak's
+  innings.
+- The squad file said "Auqib Nabi Dar", which resolved to Aleem Dar the umpire on the
+  shared surname, giving Delhi Capitals a phantom 26th player.
+
+Both were caught by a count that did not add up, not by a check in the code.
+
+## Live matches
+
+A figure from a match still being played is the score on the board when the page was
+read, not the player's final one for the innings. Mukesh Kumar was stored at 84 (102)
+during an innings he finished on 0 (0) — and led Performance of the Day on it.
+
+Nothing in the row says it is live: the cell reads "84 (102)", indistinguishable from
+a completed innings. So the match's own date decides it, with a span that depends on
+format — a Test stays open five days, because an innings begun on day one is still
+being added to on day four; everything else closes at the end of its own day. Those
+rows carry a LIVE badge and are refetched every run, ignoring the cache, until the
+figure can no longer move.
+
+## Fixtures
+
+`/schedule` carries exactly two days of fixtures as `.match-card-container` elements.
+Each card's link encodes the side codes, the stage and a stable match id:
+
+```
+/cricket-live-score/rno-vs-tus-14th-match-csa-pro-t20-cup-2026-match-updates-14IM
+```
+
+Squads come from the match page, where both line-ups are listed as `/player/<slug>`
+links — the same slugs this project pins. That is what makes a new tournament work: a
+player picked for a competition he has never appeared in has no history to match on,
+but his slug is there from the moment the squad is announced.
+
+Two traps: the page's promotional rail links players too (reading every `/player/`
+link put Kohli and Rohit into all eighteen fixtures), and `.playingxi-teams` is a
+toggle showing one squad at a time, so the two columns on screen are one team's
+line-up rather than two.
 
 ## Layout
 
 ```
 src/
-  core/registry.js      identity resolution + quarantine  (tests: registry.test.js)
-  core/squads.js        squad membership, overrides, tracked-set union
-  core/csv.js           RFC4180 parser (player names contain commas)
-  sources/source.js     adapter contract every source implements
-  sources/cricsheet.js  the backbone source: download, cache, extract
-  build-index.js        flattens matches into the site payload
+  sources/crex.js       the scraper: card walk, format tabs, live detection
+  ingest-crex.js        drives it across every pinned player, caches to disk
+  ingest-fixtures.js    the next two days, with squads
+  build-index.js        flattens everything into the site payload
+  bundle-site.js        inlines that payload into one publishable file
+  core/registry.js      identity resolution      (tests: registry.test.js)
+  core/squads.js        squad membership and the tracked set
+  core/merge.js         assembles rows; deliberately does not second-guess them
+  core/display-name.js  "MD Shanaka" -> "Dasun Shanaka"
 site/
-  index.html            the page (reads data/*.json)
-  beyond-the-ipl.html   generated: same page with data inlined, for publishing
+  offseason.html        the page, with an empty data stub
+  offseason-live.html   generated: the same page with the data inlined
 data/
-  raw/people.csv        Cricsheet register
-  squads-2026.json      IPL squads, transcribed (changes at auction/trade windows)
-  player-overrides.json hand-verified name -> canonical id pins
-  cache/cricsheet/      downloaded match archives
+  crex-players.json     slug + franchise per player — the identity contract
+  crex-performances.json  every scraped innings
+  squads-2026.json      IPL squads, transcribed
+  raw/people.csv        name register
+  cache/crex/           scraped pages (gitignored, ~1.4 GB)
 ```
 
 ## Running it
@@ -80,76 +133,54 @@ data/
 npm install
 npx playwright install chromium
 
-npm run scrape     # read every pinned player's CREX page   (~90 min cold, seconds warm)
-npm run fixtures   # the next two days, with squads         (~2 min)
+npm run scrape     # every pinned player's CREX page   (~90 min cold, seconds warm)
+npm run fixtures   # the next two days, with squads    (~2 min)
 npm run build      # site/data/*.json, then offseason-live.html
 npm run refresh    # all three, in order
 ```
 
-`npm run scrape` is incremental. A player page read within `CACHE_HOURS` (default 24)
-is taken from `data/cache/crex` rather than fetched again, so a cold run costs about
-ninety minutes and a same-day re-run costs seconds. Delete the cache to force a full
-re-read.
-
-Environment:
+The scrape is incremental. A player page read within `CACHE_HOURS` is taken from
+`data/cache/crex` rather than fetched again, so a cold run costs about ninety minutes
+and a same-day re-run costs seconds — except for players with a live innings, who are
+always refetched. Delete the cache to force a full re-read.
 
 | variable | default | meaning |
 | --- | --- | --- |
-| `SEASON_START` | `2026-06-01` | first day the tracker covers; everything earlier is dropped |
-| `CACHE_HOURS` | `24` | how long a scraped player page stays usable |
+| `SEASON_START` | `2026-06-01` | first day covered; everything earlier is dropped |
+| `CACHE_HOURS` | `24` | how long a scraped page stays usable |
 | `SCRAPE_CONCURRENCY` | `2` | player pages read at once |
 
 Concurrency is deliberately low. At four, pages timed out often enough that seventy
 players silently lost every innings in one run — and because a failed fetch returned
 an empty list instead of throwing, the run still reported `0 failed`. Both halves of
-that are fixed, but two remains the setting that finishes intact.
+that are fixed, but two is the setting that finishes intact.
 
 To serve the built page locally: `cd site && python3 -m http.server 8777`.
 
 ## Deploying
 
-`.github/workflows/refresh.yml` runs the whole pipeline daily at 03:30 UTC (09:00 IST)
-and publishes to GitHub Pages. It is free: public repositories get unlimited Actions
+`.github/workflows/refresh.yml` runs the pipeline daily at 03:30 UTC (09:00 IST) and
+publishes to GitHub Pages. It is free: public repositories get unlimited Actions
 minutes, and the job finishes well inside the six-hour cap.
 
-One-time setup, after pushing the repository to GitHub:
+One-time setup after pushing to GitHub:
 
 1. **Settings → Pages → Source: GitHub Actions.**
-2. **Settings → Actions → General → Workflow permissions: Read and write**, so the
-   job can commit the refreshed data back.
-3. Optionally **Settings → Variables → Actions** → `SEASON_START`, to move the cutoff
-   without editing the workflow.
+2. **Settings → Actions → General → Workflow permissions: Read and write**, so the job
+   can commit refreshed data back.
+3. Optionally **Settings → Variables → Actions** → `SEASON_START`.
 
 Then **Actions → refresh → Run workflow** to confirm it works rather than waiting a day.
 
 The scrape cache is carried between runs by `actions/cache`, keyed by run id with a
 `crex-cache-` prefix fallback, so each day restores the previous day's cache and only
-refetches what has gone stale. The cache is ignored by git — it is 1.4 GB locally and
-never belongs in the repository.
-
-## Data sources, and what was rejected
-
-**Cricsheet** (CC BY 4.0) is the backbone: free, permissively licensed, and it ships
-ball-by-ball data with embedded player ids. It covers internationals plus IPL, BBL, PSL,
-CPL, T20 Blast, SA20, ILT20, The Hundred, MLC, BPL, LPL, Super Smash, Syed Mushtaq Ali
-Trophy, County Championship and Sheffield Shield. It does **not** cover Ranji Trophy,
-Vijay Hazare, TNPL or KPL, and it is not live — files land within days of a match, so
-this answers "what did my players do recently", not "what is happening right now".
-
-**CREX was considered and rejected as a primary source.** It has no public API, its data
-is licensed from upstream feed providers, its site is a JS shell with no stable player
-ids to scrape, and it would break mid-match. The adapter contract in
-`src/sources/source.js` exists so a source like it — or a paid feed — can be added later
-as one isolated module that is allowed to fail without taking the page down.
-
-**Squad listings** are transcribed once from public sources rather than scraped live.
-iplt20.com renders squads client-side ("Loading team details, please wait…"), so live
-scraping would need a headless browser — a lot of fragile machinery for data that
-changes twice a year.
+refetches what has gone stale. It is gitignored — 1.4 GB never belongs in a repo.
 
 ## Known limits
 
-- Not live. Same-day scores need a paid feed; that is the one thing money actually buys.
-- Deep Indian domestic cricket (Ranji, Vijay Hazare, TNPL) is not covered.
+- A live figure is only as good as what CREX displays mid-innings. The LIVE badge is
+  there so a reader knows not to treat it as final.
 - Squad files need a manual refresh after the auction and trade windows.
-- 22 uncapped squad players have no performance history until their first tracked match.
+- Forty players have no post-IPL cricket yet, so their pages stay empty until they play.
+- A surname collision can still mispin a player to the wrong CREX page. Two have been
+  found; both were caught by hand, and nothing in the build would stop a third.
