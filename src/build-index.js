@@ -264,10 +264,14 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
   const players = new Map();
 
   // Seed from the tracked set so squad members with no appearances still appear.
-  for (const t of tracked.values()) {
+  for (const [trackedKey, t] of tracked) {
     const reg = t.id ? registry.get(t.id) : null;
     const registerName = reg?.unique_name ?? t.name;
-    const crex = (t.id ? crexPins[t.id] : null) ?? crexSlugPins[t.name] ?? null;
+    const crex =
+      (t.id ? crexPins[t.id] : null) ??
+      crexSlugPins[t.name] ??
+      crexSlugPins[String(trackedKey).replace(/^unmapped:/, '')] ??
+      null;
 
     // A player with no register entry gets an id built from his name. It
     // has to be the *same* string the map is keyed by and that his rows carry, or
@@ -275,7 +279,12 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
     // nothing. That is what hid Macneil Noronha's ten Maharaja T20 innings and
     // Vishal Nishad's six in the UP T20 — the rows existed all along under
     // "unmapped:<name>" while the record's id was null.
-    const playerKey = t.id ?? `unmapped:${t.name}`;
+    // Use the key the tracked set already chose, rather than rebuilding one from the
+    // display name. Those differ whenever a squad sheet and a CREX pin spell a player
+    // differently — "Ravichandran Smaran" against "Smaran-R" — and rebuilding it left
+    // the record under one id while his innings sat under the other. On the page that
+    // read as the same innings twice, once against a blank name.
+    const playerKey = t.id ?? trackedKey;
 
     players.set(playerKey, {
       id: playerKey,

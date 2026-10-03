@@ -2824,18 +2824,6 @@
     }
   },
   "slugPins": {
-    "Saurabh Dubey": {
-      "slug": "saurabh-dubey-62M",
-      "code": "62M",
-      "displayName": "Saurabh Dubey",
-      "franchise": "Kolkata Knight Riders"
-    },
-    "Mukul Choudhary": {
-      "slug": "mukul-choudhary-B82",
-      "code": "B82",
-      "displayName": "Mukul Choudhary",
-      "franchise": "Lucknow Super Giants"
-    },
     "Vicky Ostwal": {
       "slug": "vicky-ostwal-7JR",
       "code": "7JR",
@@ -2925,12 +2913,6 @@
       "code": "7JB",
       "displayName": "Harnoor Pannu",
       "franchise": "Punjab Kings"
-    },
-    "Smaran-R": {
-      "slug": "smaran-ravichandran-96H",
-      "code": "96H",
-      "displayName": "Smaran-R",
-      "franchise": "Sunrisers Hyderabad"
     },
     "Mohammed Salahuddin Izhar": {
       "slug": "mohammed-izhar-M8K",

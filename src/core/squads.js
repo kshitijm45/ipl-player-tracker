@@ -40,6 +40,12 @@ export function loadOverrides(path = OVERRIDE_PATH) {
  * @returns {{ members: Map<string, {teams: string[], playedIPL: boolean}>,
  *             unresolved: Array<{name: string, team: string, reason: string}> }}
  */
+/** "smaran-ravichandran-96H" -> "smaranravichandran", for matching a squad spelling. */
+function slugToName(slug) {
+  if (!slug) return null;
+  return String(slug).replace(/-[A-Za-z0-9]{1,4}$/, '').replace(/-/g, ' ').trim();
+}
+
 export function resolveSquads({
   registry,
   squadFile,
@@ -53,9 +59,21 @@ export function resolveSquads({
   const knownUnmapped = new Set(overrideFile?.unmapped?.names ?? []);
   // Players CREX knows but the register does not. The slug is their only identity,
   // so they are recognised here by the exact name the squad lists them under.
-  const bySlugName = new Map(
-    Object.entries(slugPins).map(([n, pin]) => [String(n).toLowerCase(), pin])
-  );
+  //
+  // A squad sheet and a pin can spell the same man differently — "Ravichandran
+  // Smaran" against "Smaran-R", "Aman Rao" against "Aman Rao Perala" — so the pin is
+  // found by its own name, its display name, and the name inside its slug. Whichever
+  // matches, the record is keyed by the pin's own name, because that is what the
+  // scraped rows are keyed by: keying it by the squad spelling instead left the rows
+  // orphaned, which is why those players showed twice on the page, once with no name
+  // at all.
+  const bySlugName = new Map();
+  for (const [pinName, pin] of Object.entries(slugPins)) {
+    const entry = { pinName, pin };
+    for (const alias of [pinName, pin?.displayName, slugToName(pin?.slug)]) {
+      if (alias) bySlugName.set(String(alias).toLowerCase().replace(/[^a-z]/g, ''), entry);
+    }
+  }
 
   if (!squadFile?.teams) return { members, unresolved };
 
@@ -72,9 +90,11 @@ export function resolveSquads({
       // register, or a name the register cannot place is handed to whichever
       // near-match the fuzzy matcher prefers — which is how "Mangesh Yadav", who has
       // a slug of his own, kept resolving to Mayank Yadav instead.
-      const slugPin = bySlugName.get(String(name).toLowerCase());
-      if (slugPin) {
-        const key = `unmapped:${name}`;
+      const slugHit = bySlugName.get(String(name).toLowerCase().replace(/[^a-z]/g, ''));
+      if (slugHit) {
+        const { pinName, pin: slugPin } = slugHit;
+        // Keyed by the pin's name so the scraped rows join; displayed by the squad's.
+        const key = `unmapped:${pinName}`;
         if (!members.has(key)) {
           members.set(key, {
             id: null,
@@ -83,6 +103,7 @@ export function resolveSquads({
             teams: [],
             playedIPL: false,
             unmapped: true,
+            crexSlug: slugPin?.slug ?? null,
           });
         }
         const rec = members.get(key);
