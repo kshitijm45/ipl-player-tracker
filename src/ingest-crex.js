@@ -298,9 +298,15 @@ async function recordMatchDays(source, byPlayer) {
         date,
         batting: r.batting ?? null,
         bowling: r.bowling ?? null,
-        // A figure read while the match is still being played may still move. Once
-        // the feed has settled the match, it cannot.
-        provisional: ended && !capturable ? undefined : capturable || undefined,
+        // Which figures can still move, and it is not simply "all of them while the
+        // match is on". An innings that closed on day 2 of a Test still being played
+        // is finished — the batsman is out and the figure is final — so badging it
+        // "in progress" because the match continues is wrong.
+        //
+        // The commentary feed says which day each innings ended, so an innings whose
+        // closing day is already behind us is settled even mid-match. Only one dated
+        // today, in a match still live, is genuinely unfinished.
+        provisional: isStillMoving({ ended, capturable, observedOn }) || undefined,
         meta: {
           fixture: r.fixture ?? null,
           competition: r.competition ?? null,
@@ -322,6 +328,20 @@ async function recordMatchDays(source, byPlayer) {
 
   saveStore(store);
   return { matches: byMatch.size, live, observed, unrecoverable, commentaryDated, noFeed };
+}
+
+/**
+ * Can this figure still change?
+ *
+ * Only if the match is still being played *and* this innings has not already closed.
+ * Where the commentary feed gave a closing day, an earlier one means the innings is
+ * over whatever the match is doing. Without a closing day, the match's own state is
+ * all there is to go on.
+ */
+function isStillMoving({ ended, capturable, observedOn }) {
+  if (!capturable) return false;
+  if (!ended) return true;
+  return ended >= observedOn;
 }
 
 /** Which day of the match is this date? Day 1 is the start date itself. */

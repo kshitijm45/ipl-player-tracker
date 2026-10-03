@@ -121,6 +121,39 @@ test('a live match with no label still falls back to arithmetic', () => {
   assert.equal(r.from, 'arithmetic');
 });
 
+/* ── a match in progress ──
+   The Irani Cup Test, live on 3 October: started 1 Oct, innings 1 closed on the 2nd,
+   innings 2 still being batted on the 3rd. Both innings are in one live match, and
+   they must not be treated the same way. */
+
+test('an innings that closed earlier in a live match is already final', () => {
+  // Day 1-2 innings, dismissed. The match continues, but this figure cannot move:
+  // badging it "in progress" because the match is on would be wrong.
+  let row;
+  row = recordSnapshot(row, { day: 1, date: '2026-10-01', batting: { runs: 20, balls: 40, out: false }, provisional: true });
+  row = recordSnapshot(row, { day: 2, date: '2026-10-02', batting: { runs: 51, balls: 60, out: true } });
+  row = recordSnapshot(row, { day: 3, date: '2026-10-03', batting: { runs: 51, balls: 60, out: true } });
+
+  const rows = dailyRows(row);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].date, '2026-10-02');
+  assert.equal(rows[0].batting.runs, 51);
+  assert.equal(rows[0].provisional, undefined);
+});
+
+test('the innings being played right now is still provisional', () => {
+  let row;
+  row = recordSnapshot(row, {
+    day: 3, date: '2026-10-03',
+    batting: { runs: 126, balls: 131, out: false },
+    provisional: true,
+  });
+  const rows = dailyRows(row);
+  assert.equal(rows[0].date, '2026-10-03');
+  assert.equal(rows[0].batting.runs, 126);
+  assert.equal(rows[0].provisional, true);
+});
+
 test('only a live match is worth recording against', () => {
   assert.equal(stillCapturable({ status: 'Live' }), true);
   assert.equal(stillCapturable({ status: 'Finished' }), false);
