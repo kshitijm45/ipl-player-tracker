@@ -135,6 +135,36 @@ export const PLAYER_TIMEOUT_MS = Number(process.env.PLAYER_TIMEOUT_MS) || 300e3;
  */
 export const LIVE_FEED_PAGES = Number(process.env.LIVE_FEED_PAGES) || 30;
 
+/**
+ * Keep the previous rows when a re-read came back with strictly fewer.
+ *
+ * A player page is read through a sequence of tab clicks and card selections, each
+ * wrapped in a catch, and an incomplete read is indistinguishable from a player who
+ * simply has fewer innings — so it silently overwrote good data with less. That is
+ * how a genuinely cold scrape came back with 2,807 innings where the previous
+ * cache-served run had 2,832: Kuldeep Yadav lost his three West Indies ODIs, and
+ * which players were affected shuffled from run to run.
+ *
+ * Innings do not disappear. A player's history only grows, so fewer rows than last
+ * time means the read was short, not that the record changed. The exception is the
+ * season cutoff moving forward, which legitimately drops old rows — that is a
+ * deliberate change to `since` rather than something a single run does, and it
+ * resolves itself once the cache is cleared.
+ *
+ * Deliberately compares counts rather than merging the two sets. A merge would also
+ * preserve rows that CREX has corrected or withdrawn, and this project's rule is that
+ * what CREX currently prints is what the site shows.
+ */
+export function keepRicher(previous, fresh, slug) {
+  if (!Array.isArray(previous) || previous.length === 0) return fresh;
+  if (fresh.length >= previous.length) return fresh;
+  shortReads.push({ slug, had: previous.length, got: fresh.length });
+  return previous;
+}
+
+/** Players whose re-read returned fewer rows than were already held. */
+const shortReads = [];
+
 /** Reject if `p` has not settled within `ms`. The caller records which player. */
 function withTimeout(p, ms) {
   let timer;
@@ -189,7 +219,7 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
           source.fetchMatches(pin.slug, { maxAgeMs: CACHE_MS, since }),
           PLAYER_TIMEOUT_MS
         );
-        results[playerId] = rows
+        const fresh = rows
           .map((r) => ({
             ...r,
             date: resolveDate(r.date, r.competition, season) ?? r.date,
@@ -197,6 +227,7 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
           }))
           // A tournament spanning the cutoff still yields earlier innings; drop them.
           .filter((r) => !since || !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || r.date >= since);
+        results[playerId] = keepRicher(results[playerId], fresh, pin.slug);
         done++;
       } catch (err) {
         // A swallowed error made a skipped player look like a scraped one: the run
@@ -247,13 +278,14 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
     for (const f of failures.splice(0)) {
       try {
         const rows = await source.fetchMatches(f.slug, { maxAgeMs: 0, since });
-        results[f.playerId] = rows
+        const fresh = rows
           .map((r) => ({
             ...r,
             date: resolveDate(r.date, r.competition, season) ?? r.date,
             playerId: f.playerId,
           }))
           .filter((r) => !since || !/^\d{4}-\d{2}-\d{2}$/.test(r.date) || r.date >= since);
+        results[f.playerId] = keepRicher(results[f.playerId], fresh, f.slug);
         done++;
         failed--;
       } catch (err) {
@@ -270,6 +302,18 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
   flush(results);
   const total = Object.values(results).reduce((n, r) => n + r.length, 0);
   console.log(`\n  ${done} players, ${total} innings, ${failed} failed`);
+  if (shortReads.length) {
+    // Named rather than counted, because a page that reads short repeatedly is a bug
+    // to chase and one that does it once is a flaky click.
+    console.log(
+      `  ${shortReads.length} short read${shortReads.length === 1 ? '' : 's'} ` +
+        '(kept the fuller previous rows):'
+    );
+    for (const s of shortReads.slice(0, 12)) {
+      console.log(`    ${s.slug} — had ${s.had}, read ${s.got}`);
+    }
+    if (shortReads.length > 12) console.log(`    …and ${shortReads.length - 12} more`);
+  }
   if (multi.matches) {
     console.log(
       `  multi-day: ${multi.observed} innings dated across ${multi.matches} matches ` +

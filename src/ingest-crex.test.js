@@ -34,3 +34,33 @@ test('an absent or unparseable value falls back to a day', () => {
   assert.equal(cacheMs('   '), 24 * H);
   assert.equal(cacheMs('abc'), 24 * H);
 });
+
+/* ── short reads ──
+   A player page is read through a sequence of tab clicks and card selections, each
+   wrapped in a catch, so an incomplete read looks exactly like a player with fewer
+   innings. It silently replaced good data with less: a genuinely cold scrape returned
+   2,807 innings where the previous run held 2,832, and Kuldeep Yadav lost his three
+   West Indies ODIs. */
+
+test('a re-read with fewer rows keeps the fuller previous set', async () => {
+  const { keepRicher } = await import('./ingest-crex.js');
+  const previous = [{ date: '2026-10-03' }, { date: '2026-09-30' }, { date: '2026-09-27' }];
+  const short = [{ date: '2026-09-27' }];
+  assert.deepEqual(keepRicher(previous, short, 'kuldeep-yadav-75'), previous);
+});
+
+test('a re-read with the same or more rows wins', async () => {
+  const { keepRicher } = await import('./ingest-crex.js');
+  const previous = [{ date: '2026-09-27' }];
+  const more = [{ date: '2026-10-03' }, { date: '2026-09-27' }];
+  assert.deepEqual(keepRicher(previous, more, 'x'), more);
+  // Equal counts take the fresh rows, so a corrected figure still lands.
+  const same = [{ date: '2026-09-27', batting: { runs: 9 } }];
+  assert.deepEqual(keepRicher(previous, same, 'x'), same);
+});
+
+test('a player with no previous rows takes whatever was read', async () => {
+  const { keepRicher } = await import('./ingest-crex.js');
+  assert.deepEqual(keepRicher(undefined, [{ date: '2026-10-03' }], 'x'), [{ date: '2026-10-03' }]);
+  assert.deepEqual(keepRicher([], [], 'x'), []);
+});
