@@ -18,6 +18,7 @@ import { loadSquadFile, resolveSquads, classifySquad } from './core/squads.js';
 import { displayName, stripDisambiguator } from './core/display-name.js';
 import { mergePerformances, mergeStats } from './core/merge.js';
 import { loadStore, expand } from './core/match-days.js';
+import { isMultiDay, MAX_TEST_DAYS } from './sources/crex-match-day.js';
 import { existsSync, readFileSync } from 'node:fs';
 
 const CREX_PATH = new URL('../data/crex-players.json', import.meta.url).pathname;
@@ -67,9 +68,14 @@ const DEPRIORITISED = /Qualifier|Sub Regional|Continental Cup|European Cup|Asian
 function unfinishedTest(row, today) {
   const d = String(row?.date ?? '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
-  if (!/test|first class|fc/i.test(String(row?.format ?? ''))) return false;
+  // The shared predicate, so "which formats run past midnight" is answered in one
+  // place. This copy was a substring match and the store's was anchored, so the two
+  // could disagree about the same innings.
+  if (!isMultiDay(row?.format)) return false;
   // Earlier than today (the day's play is over) but inside the match's five days.
-  const earliest = new Date(Date.parse(today) - 4 * 864e5).toISOString().slice(0, 10);
+  const earliest = new Date(Date.parse(today) - (MAX_TEST_DAYS - 1) * 864e5)
+    .toISOString()
+    .slice(0, 10);
   return d < today && d >= earliest;
 }
 

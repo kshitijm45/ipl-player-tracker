@@ -28,7 +28,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Source } from './source.js';
-import { parseMatchDay } from './crex-match-day.js';
+import { parseMatchDay, isMultiDay, MAX_TEST_DAYS, MULTI_DAY } from './crex-match-day.js';
 
 const CACHE_DIR = new URL('../../data/cache/crex', import.meta.url).pathname;
 const UA =
@@ -564,8 +564,13 @@ export function figureMayBeLive(row, today) {
   //
   // Treating every format as multi-day flagged 95 rows, T20s from a fortnight
   // earlier among them, and the page showed LIVE against almost everything.
-  const multiDay = /test|first class|fc|unofficial test/i.test(String(row.format ?? ''));
-  const span = multiDay ? 5 : 1;
+  //
+  // `isMultiDay` is the shared predicate rather than a regex of its own. The copy
+  // here was a substring match, so it answered yes for any competition with "test"
+  // anywhere in the string while the store's anchored version said no — the two
+  // disagreeing about the same innings is how a row stays open for five days in one
+  // place and one day in the other.
+  const span = isMultiDay(row.format) ? MAX_TEST_DAYS : 1;
   const earliest = new Date(Date.parse(today) - (span - 1) * 864e5).toISOString().slice(0, 10);
   return d >= earliest;
 }
@@ -825,11 +830,27 @@ export function parseMatchRow({ match, date, score, series, href, discipline }) 
   return row;
 }
 
+/**
+ * Fold CREX's format label onto the five this project stores: T20, ODI, Test, T10
+ * and 100B — the same five it offers as tabs on a player's page.
+ *
+ * Anything multi-day becomes "Test", because that is the only distinction the rest
+ * of the code draws: `isMultiDay` decides how long an innings stays open, and a
+ * County or Duleep Trophy innings behaves exactly as a Test innings does. Keeping
+ * "First Class" as its own string bought nothing and meant every multi-day check
+ * had to list both.
+ *
+ * An unrecognised label is passed through rather than guessed at, so a format CREX
+ * adds shows up in the data as itself instead of being silently filed as T20.
+ */
 function normaliseFormat(f) {
   if (!f) return 'Unknown';
-  const t = f.toUpperCase();
-  if (t === 'T20' || t === 'IT20') return 'T20';
-  if (t === 'ODI' || t === 'LIST A') return 'ODI';
-  if (t === 'TEST' || t === 'FIRST CLASS') return 'Test';
+  const t = f.trim().toUpperCase();
+  if (t === 'T20' || t === 'IT20' || t === 'T20I') return 'T20';
+  if (t === 'ODI' || t === 'LIST A' || t === 'ODM') return 'ODI';
+  if (t === 'T10') return 'T10';
+  // "The Hundred" is 100 balls a side; CREX tabs it as "100B".
+  if (t === '100B' || t === '100' || t === 'HUNDRED') return '100B';
+  if (MULTI_DAY.test(t)) return 'Test';
   return f;
 }

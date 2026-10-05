@@ -55,8 +55,20 @@
 /** A Test is scheduled for five days; the store keeps a row open that long. */
 export const MAX_TEST_DAYS = 5;
 
-/** Formats whose innings span more than one calendar day. */
-export const MULTI_DAY = /^(test|first class|fc)$/i;
+/**
+ * Formats whose innings span more than one calendar day.
+ *
+ * CREX exposes exactly five format tabs on a player's page — T20, ODI, Test, T10 and
+ * 100B — and `normaliseFormat` folds its multi-day labels onto "Test": a Duleep
+ * Trophy or County Championship innings arrives here already labelled Test, not
+ * "First Class" or "4-Day". The longer spellings are kept anyway because they are
+ * what the tab would say if CREX ever stopped folding them, and an unmatched
+ * multi-day format is the expensive direction to be wrong in — it dates a four-day
+ * innings as if it were settled the evening it began.
+ *
+ * T10 and 100B are single-day by construction, so they stay out deliberately.
+ */
+export const MULTI_DAY = /^(test|first class|fc|unofficial test|youth test|test match|4[- ]day|multi[- ]day)$/i;
 
 export const isMultiDay = (format) => MULTI_DAY.test(String(format ?? '').trim());
 
