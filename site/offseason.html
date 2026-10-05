@@ -724,6 +724,76 @@
   .sp.fifty i { box-shadow: inset 0 -4px 0 var(--team-2); }
   .sp em { font-family: "JetBrains Mono", monospace; font-size: 10.5px; font-style: normal; color: var(--ink-3); }
 
+  /* ── career stats ──
+     One block per format: a totals row, then a row per tournament. Figures are
+     monospaced and right-aligned so a column of them reads as a column, and an
+     absent figure is an em dash rather than a zero — "never dismissed" and "averages
+     zero" are different facts. */
+  .career {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-bottom: 0;
+    padding: 28px 32px 24px;
+  }
+  .career h3 {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 14px;
+  }
+  .cfmt { margin-top: 22px; }
+  .cfmt:first-of-type { margin-top: 0; }
+  .cfmt > .chead {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .cfmt > .chead b { font-size: 14px; letter-spacing: -.01em; }
+  .cfmt > .chead span { font-size: 11.5px; color: var(--ink-3); }
+  .ctab { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .ctab th {
+    text-align: right;
+    padding: 7px 10px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .ctab th:first-child { text-align: left; }
+  .ctab td {
+    padding: 9px 10px;
+    text-align: right;
+    border-bottom: 1px solid var(--line-soft);
+    font-family: "JetBrains Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .ctab td:first-child {
+    text-align: left;
+    font-family: inherit;
+    color: var(--ink-2);
+    white-space: normal;
+  }
+  .ctab tr:last-child td { border-bottom: 0; }
+  /* The totals row leads each block, so it is the one that carries weight. */
+  .ctab tr.tot td { font-weight: 700; color: var(--ink); border-bottom: 1px solid var(--line); }
+  .ctab tr.tot td:first-child { font-weight: 600; }
+  .ctab .none { color: var(--ink-3); }
+  /* A figure withheld until the backfill reaches it, rather than one that is zero. */
+  .ctab .pend { color: var(--ink-3); cursor: help; border-bottom: 1px dotted var(--line); }
+  .cnote { margin-top: 12px; font-size: 11.5px; color: var(--ink-3); line-height: 1.5; }
+  @media (max-width: 760px) {
+    .career { padding: 22px 18px 18px; }
+    .ctab { font-size: 12px; }
+    .ctab th, .ctab td { padding: 7px 6px; }
+  }
+
   .ledger {
     background: var(--surface);
     border: 1px solid var(--line);
@@ -1097,11 +1167,11 @@
 <script>
 // Replaced with the built index by src/bundle-site.js, which writes offseason-live.html.
 // The empty stub keeps this source file openable on its own without throwing.
-window.__DATA__ = { players: [], perfs: [], days: [], meta: {}, fixtures: [] };
+window.__DATA__ = { players: [], perfs: [], days: [], meta: {}, fixtures: [], careers: {} };
 
 const IPL = 'Indian Premier League';
 const S = { view: 'today', club: '', player: null, fmt: '', q: '', day: null, cursor: -1 };
-let P = [], F = [], D = [], M = {}, FX = [], byP = new Map(), byD = new Map();
+let P = [], F = [], D = [], M = {}, FX = [], CAR = {}, byP = new Map(), byD = new Map();
 
 const $ = (i) => document.getElementById(i);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -1306,6 +1376,7 @@ function readHash() {
 function boot() {
   const d = window.__DATA__;
   P = d.players; F = d.perfs; D = d.days; M = d.meta; FX = d.fixtures ?? [];
+  CAR = d.careers ?? {};
   for (const r of F) {
     if (!byP.has(r.playerId)) byP.set(r.playerId, []);
     byP.get(r.playerId).push(r);
@@ -1775,6 +1846,127 @@ function smallRow(r) {
   </button>`;
 }
 
+/* ── career stats ──
+   Rendered from the payload build-index computed, not recomputed here: the arithmetic
+   has tests, and an average worked out twice in two places is an average that will
+   eventually disagree with itself.
+
+   A missing figure prints as an em dash. Where it is missing because the scorecard
+   backfill has not reached it yet, it says so on hover rather than looking like a
+   number that happens to be unavailable — the distinction matters, because the figure
+   will appear later without the data having changed. */
+function careerBlock(playerId) {
+  const career = CAR[playerId] ?? [];
+  // The format filter scopes this as it scopes everything else on the page.
+  const shown = S.fmt ? career.filter((f) => f.format === S.fmt) : career;
+  if (!shown.length) return '';
+
+  const num = (v, digits) =>
+    v == null ? '<span class="none">—</span>' : digits == null ? String(v) : v.toFixed(digits);
+
+  // An economy in The Hundred is runs per ball, so the unit is stated rather than
+  // assumed — a 2.10 and a 6.98 in one column would otherwise look comparable.
+  /* A rate drawn from a fraction of the innings is worse than no rate at all: it
+     reads as the player's economy when it is one series' economy. George Linde's T20
+     bowling had balls for 1 of 14 innings and showed 10.33, which is his CSA figure
+     and nothing like his season. So a rate is only shown once most of the innings
+     behind it have been read; until then the cell says it is waiting. */
+  const PART = 0.8;
+  const covered = (b) => b.innings > 0 && b.ratesFrom / b.innings >= PART;
+
+  const partial = (b) =>
+    `<span class="pend" title="Needs balls bowled, which come from the scorecard — ${b.ratesFrom} of ${b.innings} innings read so far. A rate from only some of them would read as a season figure it is not.">—</span>`;
+
+  const econ = (b) => {
+    if (b.economy == null) return '<span class="none">—</span>';
+    if (!covered(b)) return partial(b);
+    return b.economyUnit === 'ball'
+      ? `${b.economy.toFixed(2)}<span class="none">/b</span>`
+      : b.economy.toFixed(2);
+  };
+
+  const avg = (b) => {
+    if (b.average != null) return b.average.toFixed(2);
+    if (b.averagePending) {
+      return `<span class="pend" title="Needs a scorecard read for every innings before an average can be right. Not every one of these has been read yet.">—</span>`;
+    }
+    // Complete, and genuinely has none: he has never been dismissed.
+    return `<span class="none" title="Never dismissed in this span">—</span>`;
+  };
+
+  const bowlRate = (b, key, digits) => {
+    if (b[key] != null) return covered(b) ? b[key].toFixed(digits) : partial(b);
+    if (b.ratesPending && b.innings) return partial(b);
+    return '<span class="none">—</span>';
+  };
+
+  const batRow = (label, b, cls) => `<tr class="${cls}">
+    <td>${esc(label)}</td>
+    <td>${b.innings}</td>
+    <td>${b.runs}</td>
+    <td>${num(b.strikeRate, 2)}</td>
+    <td>${avg(b)}</td>
+  </tr>`;
+
+  const bowlRow = (label, b, cls) => `<tr class="${cls}">
+    <td>${esc(label)}</td>
+    <td>${b.innings}</td>
+    <td>${b.wickets}</td>
+    <td>${econ(b)}</td>
+    <td>${bowlRate(b, 'strikeRate', 1)}</td>
+  </tr>`;
+
+  const blocks = shown.map((f) => {
+    const bat = f.tournaments.filter((t) => t.batting.innings);
+    const bowl = f.tournaments.filter((t) => t.bowling.innings);
+    const span = (t) => `${comp(t.competition)}`;
+
+    const batting = f.total.batting.innings ? `
+      <table class="ctab">
+        <thead><tr><th>Batting</th><th>Inns</th><th>Runs</th><th>SR</th><th>Avg</th></tr></thead>
+        <tbody>
+          ${batRow('All ' + f.format, f.total.batting, 'tot')}
+          ${bat.map((t) => batRow(span(t), t.batting, '')).join('')}
+        </tbody>
+      </table>` : '';
+
+    const bowling = f.total.bowling.innings ? `
+      <table class="ctab" style="margin-top:${f.total.batting.innings ? '18px' : '0'}">
+        <thead><tr><th>Bowling</th><th>Inns</th><th>Wkts</th><th>Econ</th><th>SR</th></tr></thead>
+        <tbody>
+          ${bowlRow('All ' + f.format, f.total.bowling, 'tot')}
+          ${bowl.map((t) => bowlRow(span(t), t.bowling, '')).join('')}
+        </tbody>
+      </table>` : '';
+
+    if (!batting && !bowling) return '';
+    return `<div class="cfmt">
+      <div class="chead">
+        <b>${esc(f.format)}</b>
+        <span>${f.tournaments.length} tournament${f.tournaments.length === 1 ? '' : 's'}</span>
+      </div>
+      ${batting}${bowling}
+    </div>`;
+  }).filter(Boolean).join('');
+
+  if (!blocks) return '';
+
+  // Say once, at the bottom, what a dash means — rather than footnoting every cell.
+  const anyPending = shown.some(
+    (f) => f.total.batting.averagePending || f.total.bowling.ratesPending
+  );
+  const note = anyPending
+    ? `<div class="cnote">An average needs every innings read from a scorecard, and economy needs balls bowled —
+       both are read separately from the player page and appear as the backfill reaches them. A dash is a figure
+       withheld, never a zero.</div>`
+    : '';
+
+  return `<div class="career">
+    <h3>Career by tournament</h3>
+    ${blocks}${note}
+  </div>`;
+}
+
 /* ── player ── */
 function drawPlayer() {
   const p = P.find((x) => x.id === S.player);
@@ -1849,6 +2041,7 @@ function drawPlayer() {
           </div>
         </div>
       </div>` : ''}
+      ${careerBlock(p.id)}
       <div class="ledger">
         ${all.length ? `<div class="scroller"><table>
           <thead><tr><th>Date</th><th>Match</th><th style="text-align:right">Figures</th></tr></thead>

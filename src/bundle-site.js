@@ -31,6 +31,9 @@ export function bundle() {
   const days = read('days.json', []);
   const meta = read('meta.json', {});
   const fixtures = read('fixtures.json', []);
+  // Career aggregates, keyed by player id. Computed in build-index so the arithmetic
+  // is tested rather than repeated in the page.
+  const careers = read('careers.json', {});
 
   const payload = {
     players: players.players ?? players,
@@ -38,6 +41,7 @@ export function bundle() {
     days: days.days ?? days,
     meta,
     fixtures: fixtures.fixtures ?? fixtures.rows ?? fixtures,
+    careers,
   };
 
   const html = readFileSync(SRC, 'utf8');
@@ -63,6 +67,7 @@ export function bundle() {
     perfs: payload.perfs.length,
     days: payload.days.length,
     fixtures: payload.fixtures.length,
+    careers: Object.keys(payload.careers).length,
     bytes: out.length,
   };
 }
@@ -71,6 +76,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const s = bundle();
   console.log(
     `bundled ${s.players} players / ${s.perfs} performances / ${s.days} days / ` +
-      `${s.fixtures} fixtures -> site/offseason-live.html (${(s.bytes / 1024).toFixed(0)} KB)`
+      `${s.fixtures} fixtures / ${s.careers} careers -> site/offseason-live.html ` +
+      `(${(s.bytes / 1024).toFixed(0)} KB)`
   );
 }
