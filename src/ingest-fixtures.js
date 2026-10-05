@@ -93,8 +93,14 @@ export async function scrapeFixtures({ days = 2, squads = true, maxAgeMs = 3 * 3
       return out;
     });
 
-    const today = new Date().toISOString().slice(0, 10);
-    const horizon = new Date(Date.now() + (days - 1) * 864e5).toISOString().slice(0, 10);
+    // IST, not UTC. The job is scheduled for 00:07 IST but GitHub's cron queue is
+    // best-effort and has started it as late as 03:23 IST, and for the whole of that
+    // window the UTC date is still yesterday — so a UTC `today` published yesterday's
+    // fixtures, finished matches included, as the ones coming up. `build-index` and
+    // the ingest's `observedOn` were moved to IST for exactly this reason; this was
+    // the one place left reading the clock in UTC.
+    const today = istDate();
+    const horizon = istDate((days - 1) * 864e5);
 
     const fixtures = [];
     for (const r of raw) {
@@ -321,6 +327,17 @@ function abbreviates(code, name) {
     i++;
   }
   return true;
+}
+
+/**
+ * Today's date in IST, optionally offset by `ms`.
+ *
+ * IST is UTC+5:30 year-round; India does not observe DST. This is the same shift
+ * `build-index`'s `istToday` applies, kept local rather than shared because the two
+ * files have no other reason to depend on each other.
+ */
+export function istDate(ms = 0) {
+  return new Date(Date.now() + 5.5 * 3600e3 + ms).toISOString().slice(0, 10);
 }
 
 /** "Fri, 2 Oct 2026" -> "2026-10-02". */
