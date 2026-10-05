@@ -157,9 +157,50 @@ export const LIVE_FEED_PAGES = Number(process.env.LIVE_FEED_PAGES) || 30;
  */
 export function keepRicher(previous, fresh, slug) {
   if (!Array.isArray(previous) || previous.length === 0) return fresh;
-  if (fresh.length >= previous.length) return fresh;
+  if (fresh.length >= previous.length) return carryScorecard(previous, fresh);
   shortReads.push({ slug, had: previous.length, got: fresh.length });
   return previous;
+}
+
+/**
+ * Carry the scorecard's two fields across a re-scrape.
+ *
+ * Balls bowled and the not-out flag come from the match scorecard, not the player
+ * page, so a fresh read of the page cannot produce them — it returns rows with
+ * `bowling.balls` missing and `out` set to true for everyone, because the page has no
+ * asterisk to read. Without this, every nightly scrape would silently undo the
+ * backfill: the data would be committed enriched, re-scraped bare the next evening,
+ * and the only visible symptom would be averages quietly turning into dashes.
+ *
+ * Matched on the same key the merge uses — a fixture plus a date, which is what
+ * distinguishes the two innings of one Test for one player.
+ */
+function carryScorecard(previous, fresh) {
+  const key = (r) => `${r.date ?? ''}|${r.format ?? ''}|${r.fixture ?? ''}|${r.innings ?? ''}`;
+  const old = new Map(previous.map((r) => [key(r), r]));
+  return fresh.map((r) => {
+    const had = old.get(key(r));
+    if (!had) return r;
+    const out = { ...r };
+    if (had.bowling?.balls != null && out.bowling && out.bowling.balls == null) {
+      out.bowling = { ...out.bowling, balls: had.bowling.balls };
+      if (had.bowling.maidens != null) out.bowling.maidens ??= had.bowling.maidens;
+      if (had.bowling.econ != null) out.bowling.econ ??= had.bowling.econ;
+    }
+    // Only a dismissal the scorecard established is worth carrying; the page's own
+    // `out` is not knowledge, which is the whole reason the backfill exists.
+    if (had.batting?.outFrom === 'scorecard' && out.batting) {
+      out.batting = {
+        ...out.batting,
+        out: had.batting.out,
+        outFrom: 'scorecard',
+        fours: out.batting.fours ?? had.batting.fours,
+        sixes: out.batting.sixes ?? had.batting.sixes,
+      };
+    }
+    if (had.scorecardAt) out.scorecardAt = had.scorecardAt;
+    return out;
+  });
 }
 
 /** Players whose re-read returned fewer rows than were already held. */

@@ -200,6 +200,7 @@ line-up rather than two.
 src/
   sources/crex.js       the scraper: card walk, format tabs, live detection
   sources/crex-match-day.js  dating a Test innings  (tests: crex-match-day.test.js)
+  sources/crex-scorecard.js  balls bowled and not-outs (tests: crex-scorecard.test.js)
   ingest-crex.js        drives it across every pinned player, caches to disk
   ingest-fixtures.js    the next two days, with squads
   build-index.js        flattens everything into the site payload
@@ -207,6 +208,8 @@ src/
   core/registry.js      identity resolution      (tests: registry.test.js)
   core/squads.js        squad membership and the tracked set
   core/merge.js         assembles rows; deliberately does not second-guess them
+  core/career-stats.js  the aggregates       (tests: career-stats.test.js)
+  core/scorecard-merge.js  folding a scorecard in (tests: scorecard-merge.test.js)
   core/match-days.js    the multi-day snapshot store
   core/display-name.js  "MD Shanaka" -> "Dasun Shanaka"
 site/
@@ -277,6 +280,112 @@ The scrape cache is carried between runs by `actions/cache`, keyed by run id wit
 `crex-cache-` prefix fallback, so each day restores the previous day's cache and only
 refetches what has gone stale. It is gitignored — 1.4 GB never belongs in a repo.
 
+## Career stats
+
+Batting (innings, runs, strike rate, average) and bowling (innings, wickets, economy,
+strike rate), broken down by tournament and totalled by format. Computed here, not read
+from CREX: it publishes no career table at all — `/player/<slug>/stats` and `/career`
+are both 404 — so the per-innings rows are the only aggregate-able source.
+
+Two rules decide every figure:
+
+- **Aggregated from summed totals, never by averaging per-match ratios.** The mean of
+  each innings' strike rate is not the strike rate; it weights a 2-ball cameo the same
+  as a 60-ball innings.
+- **A figure that cannot be computed is absent, not zero.** An average of 0 and "never
+  been dismissed" are different facts, and a 0 economy reads as unplayably good rather
+  than as missing.
+
+| stat | formula |
+| --- | --- |
+| Batting SR | runs / balls faced x 100 |
+| Batting average | runs / **dismissals** — not innings |
+| Economy | runs / overs, i.e. runs x 6 / balls bowled |
+| Bowling SR | balls bowled / wickets |
+
+The Hundred is the one exception: economy there is runs per **ball**. A five-ball over
+makes "per over" meaningless, and CREX's own printed `ER` is per five balls — computing
+it per six would silently contradict the source. Bowling strike rate needs no special
+case, being already ball-based.
+
+No combined all-format total is produced. Adding a Test innings to a Hundred innings
+gives a number no scorecard agrees with.
+
+### What the player page cannot give
+
+Two fields are missing from it entirely, and between them they block three of the eight
+figures above:
+
+- **Balls bowled.** The bowling view prints "4-48" plus an economy figure that has to be
+  discarded, because a bowler's "78 (114)" is indistinguishable from a batting innings
+  (the Mukesh Choudhary bug). No balls bowled means no economy and no bowling strike
+  rate.
+- **Not out.** The innings table drops the asterisk — `td.textContent` simply has no `*`
+  in it — so the scrape recorded **2,278 of 2,278 innings as dismissals**, which is
+  impossible. Shubman Gill's 223\* against the West Indies was stored as out, and that
+  one player's average read 70.00 instead of 86.15.
+
+Neither was visible as an error. Both produced figures that looked like data.
+
+### Reading a scorecard
+
+`src/sources/crex-scorecard.js` reads both off the match scorecard, keyed by the same
+`/player/<slug>` this project already pins. Every economy figure it parses reconciles
+against `runs / (balls / 6)`, which is the independent check that the overs conversion
+is right — "11.3" is eleven overs and three balls, 69, not 11.5 overs.
+
+Four traps, each of which produced plausible wrong data first:
+
+- **The short URL is a dead end.** `/scoreboard/<id>/match-scorecard` redirects to
+  `undefined-<id>` and renders no scorecard table, only a five-player "top performers"
+  block that looks enough like one to be mistaken for it. The full canonical URL is
+  required, so the scrape now keeps each row's `matchUrl`; older rows resolve it from
+  the short URL's `<link rel="canonical">`, which intermittently serves the dead end
+  itself and so is retried.
+- **Every table carries `class="bowler-table"`**, batting ones included. Only the header
+  row distinguishes them. Keying on the class gave a batsman three maidens and an
+  economy of 94.
+- **One innings renders at a time.** The rest sits behind a team-code toggle with no URL
+  of its own — `?innings=2` and friends are all ignored. 473 of the 750 matches here
+  need players from both innings, and on IND v WI eleven of the twelve tracked players
+  are in the innings that does not render, so a fetch-only pass enriched one of them and
+  reported success. Hence a browser, clicking through the sides. Each click re-renders
+  numbered from 1, so innings are deduplicated on their figures rather than that number.
+- **The Hundred heads its bowling column `B`, not `O`** — the same letter the batting
+  table uses for balls faced.
+
+The scorecard contributes balls bowled and the dismissal, plus maidens, its own economy,
+fours and sixes where the page had nothing. It never creates or deletes an innings, and
+never overwrites a figure the page gave: where the two disagree on runs or wickets the
+disagreement is counted, not resolved, because the page's figure is what the innings
+table shows and a silent correction would make the two halves of the site disagree.
+
+An average is shown only once **every** innings' dismissal is known. A single unknown
+suppresses it, because the error runs one way — an unrecorded not-out is counted as an
+out — so the figure would always flatter, with nothing on the page to reveal it.
+
+### Running the backfill
+
+```bash
+node src/backfill-scorecards.js            # every match in the data (~75 min)
+node src/backfill-scorecards.js --dry      # report without writing
+node src/backfill-scorecards.js --limit=5  # try a few first
+```
+
+It runs **once**, not daily. The enriched rows are committed with the rest of `data/`,
+and a match whose innings are already enriched is skipped — a finished scorecard can
+never change, so there is nothing to re-read. Interrupting it is safe: it writes every
+25 matches and resumes where it stopped.
+
+In CI it is the `scorecards` input on the refresh workflow, with `scorecard_limit` to
+split the backlog across a few runs. The daily job reads only new matches, capped at 60.
+
+One thing this depends on: `keepRicher` carries the scorecard's fields across a
+re-scrape. Without that the nightly run would undo the backfill every evening — the
+player page cannot produce either field, so a fresh read returns rows with no balls
+bowled and everyone out — and the only symptom would be averages quietly turning back
+into dashes.
+
 ## Known limits
 
 - A live figure is only as good as what CREX displays mid-innings. The LIVE badge is
@@ -291,3 +400,9 @@ refetches what has gone stale. It is gitignored — 1.4 GB never belongs in a re
 - Forty players have no post-IPL cricket yet, so their pages stay empty until they play.
 - A surname collision can still mispin a player to the wrong CREX page. Two have been
   found; both were caught by hand, and nothing in the build would stop a third.
+- A batting average is missing until every one of that player's innings has been read
+  from a scorecard, so averages appear gradually as the backfill proceeds rather than
+  all at once. Economy and bowling strike rate are computed from whichever innings have
+  balls bowled, and say how many that was.
+- A scorecard that cannot be read leaves its innings exactly as the player page had
+  them. The match is retried on the next run, since it never stops needing one.

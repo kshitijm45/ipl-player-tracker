@@ -13,6 +13,7 @@
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { careersByPlayer } from './core/career-stats.js';
 import { PlayerRegistry } from './core/registry.js';
 import { loadSquadFile, resolveSquads, classifySquad } from './core/squads.js';
 import { displayName, stripDisambiguator } from './core/display-name.js';
@@ -417,7 +418,12 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
     .map(([date, ids]) => ({ date, players: [...new Set(ids)].length, innings: ids.length }))
     .sort((a, b) => b.date.localeCompare(a.date));
 
+  // Batting and bowling per tournament, totalled per format. Computed here rather
+  // than in the page so the arithmetic is tested and the payload is ready to render.
+  const careers = careersByPlayer(performances);
+
   mkdirSync(OUT_DIR, { recursive: true });
+  writeFileSync(`${OUT_DIR}/careers.json`, JSON.stringify(careers));
   writeFileSync(`${OUT_DIR}/days.json`, JSON.stringify(days));
   writeFileSync(`${OUT_DIR}/players.json`, JSON.stringify(playerList));
   writeFileSync(`${OUT_DIR}/performances.json`, JSON.stringify(performances));

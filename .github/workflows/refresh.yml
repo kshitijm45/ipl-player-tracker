@@ -34,6 +34,14 @@ on:
         description: 'Date Test innings already scraped, from the commentary feed'
         type: boolean
         default: false
+      scorecards:
+        description: 'Read match scorecards for balls bowled and not-outs (~75 min)'
+        type: boolean
+        default: false
+      scorecard_limit:
+        description: 'Cap how many scorecards to read this run (blank = all)'
+        type: string
+        default: ''
 
 # One refresh at a time: two runs would race on the same commit.
 #
@@ -109,6 +117,37 @@ jobs:
         # from failing over a one-off migration step.
         if: ${{ inputs.backfill }}
         run: npm run backfill || true
+
+      - name: Backfill scorecards
+        # One-time, and only when asked, like the step above.
+        #
+        # The player page carries neither balls bowled nor the not-out asterisk, so
+        # economy, bowling strike rate and batting average cannot be computed from it
+        # at all. This reads each match's scorecard, which states both.
+        #
+        # Why it only needs running once: the enriched rows are committed with the
+        # rest of data/, and a match whose innings are already enriched is skipped on
+        # the next run. A finished scorecard can never change, so there is nothing to
+        # re-read. New matches are picked up by the daily step below.
+        #
+        # `scorecard_limit` exists because the full backlog is ~750 matches at about
+        # six seconds each. Run it in a few passes if a single job would crowd out the
+        # scrape; each pass resumes where the last stopped.
+        if: ${{ inputs.scorecards }}
+        run: |
+          if [ -n "${{ inputs.scorecard_limit }}" ]; then
+            node src/backfill-scorecards.js --limit=${{ inputs.scorecard_limit }} || true
+          else
+            node src/backfill-scorecards.js || true
+          fi
+
+      - name: Read new matches' scorecards
+        # The daily counterpart: a handful of matches are played each day, and their
+        # balls bowled and not-outs have to come from somewhere. Capped so a day with
+        # an unreadable backlog cannot stretch the job, and skipped entirely on the
+        # run that is doing the full backfill.
+        if: ${{ !inputs.scorecards }}
+        run: node src/backfill-scorecards.js --limit=60 || true
 
       - name: Build the site
         env:

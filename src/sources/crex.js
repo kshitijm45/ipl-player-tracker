@@ -793,6 +793,11 @@ export function parseMatchRow({ match, date, score, series, href, discipline }) 
   // stable key for the match.
   const mid = String(href ?? '').match(/match-updates-([A-Za-z0-9]+)/);
   if (mid) row.matchId = mid[1];
+  // The full path, kept because the id alone cannot reach the scorecard: the short
+  // `/scoreboard/<id>/` URL redirects to a dead `undefined-<id>` page that renders no
+  // scorecard table. Recovering this href costs a request per match otherwise, and the
+  // scrape already has it here.
+  if (href) row.matchUrl = String(href);
   // "1st Inn" / "2nd Inn" distinguishes the two innings of one Test for one player,
   // and is the only part of the fixture string that varies between them.
   const inn = match.match(/,\s*(\d)(?:st|nd|rd|th)\s*Inn/i);

@@ -11,7 +11,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cacheMs } from './ingest-crex.js';
+import { cacheMs, keepRicher } from './ingest-crex.js';
 
 const H = 3600e3;
 
@@ -63,4 +63,88 @@ test('a player with no previous rows takes whatever was read', async () => {
   const { keepRicher } = await import('./ingest-crex.js');
   assert.deepEqual(keepRicher(undefined, [{ date: '2026-10-03' }], 'x'), [{ date: '2026-10-03' }]);
   assert.deepEqual(keepRicher([], [], 'x'), []);
+});
+
+/* ── carrying the scorecard's fields across a re-scrape ──
+   Balls bowled and the not-out flag come from the match scorecard, which the player
+   page cannot produce. A nightly scrape returns rows without them, so without this
+   the backfill is undone every evening — and the only symptom would be averages
+   quietly turning back into dashes. */
+
+test('a re-scrape keeps balls bowled', () => {
+  const previous = [
+    { date: '2026-10-02', format: 'T20', fixture: '15th T20 vs LIO',
+      bowling: { wickets: 1, runs: 34, balls: 24, maidens: 0, econ: 8.5 } },
+  ];
+  const fresh = [
+    { date: '2026-10-02', format: 'T20', fixture: '15th T20 vs LIO',
+      bowling: { wickets: 1, runs: 34 } },
+  ];
+  const [row] = keepRicher(previous, fresh, 'x');
+  assert.equal(row.bowling.balls, 24);
+  assert.equal(row.bowling.econ, 8.5);
+});
+
+test('a re-scrape keeps a scorecard-established not-out', () => {
+  const previous = [
+    { date: '2026-09-30', format: 'ODI', fixture: '2nd ODI vs WI',
+      batting: { runs: 223, balls: 133, out: false, outFrom: 'scorecard' } },
+  ];
+  // The page has no asterisk, so a fresh read always says "out".
+  const fresh = [
+    { date: '2026-09-30', format: 'ODI', fixture: '2nd ODI vs WI',
+      batting: { runs: 223, balls: 133, out: true } },
+  ];
+  const [row] = keepRicher(previous, fresh, 'x');
+  assert.equal(row.batting.out, false);
+  assert.equal(row.batting.outFrom, 'scorecard');
+});
+
+test('a dismissal the page merely asserted is not carried', () => {
+  // Only the scorecard's verdict is knowledge; carrying the page's own `out` would
+  // make an un-backfilled innings look settled and let a wrong average through.
+  const previous = [
+    { date: '2026-09-30', format: 'ODI', fixture: '1st ODI vs WI',
+      batting: { runs: 10, balls: 8, out: true } },
+  ];
+  const fresh = [
+    { date: '2026-09-30', format: 'ODI', fixture: '1st ODI vs WI',
+      batting: { runs: 10, balls: 8, out: true } },
+  ];
+  const [row] = keepRicher(previous, fresh, 'x');
+  assert.equal(row.batting.outFrom, undefined);
+});
+
+test('the two innings of a Test are not conflated', () => {
+  // Keyed on the innings number too, or a player's second-innings not-out would be
+  // carried onto his first.
+  const previous = [
+    { date: '2026-08-30', format: 'Test', fixture: 'Test, 1st Inn', innings: 1,
+      batting: { runs: 1, balls: 9, out: true, outFrom: 'scorecard' } },
+    { date: '2026-08-30', format: 'Test', fixture: 'Test, 2nd Inn', innings: 2,
+      batting: { runs: 25, balls: 36, out: false, outFrom: 'scorecard' } },
+  ];
+  const fresh = previous.map((r) => ({ ...r, batting: { runs: r.batting.runs, balls: r.batting.balls, out: true } }));
+  const rows = keepRicher(previous, fresh, 'x');
+  assert.equal(rows[0].batting.out, true);
+  assert.equal(rows[1].batting.out, false, "the second innings' not-out is its own");
+});
+
+test('a newly scraped innings is untouched', () => {
+  const previous = [
+    { date: '2026-10-01', format: 'T20', fixture: 'a', batting: { runs: 5, balls: 4, out: false, outFrom: 'scorecard' } },
+  ];
+  const fresh = [
+    ...previous.map((r) => ({ ...r, batting: { runs: 5, balls: 4, out: true } })),
+    { date: '2026-10-03', format: 'T20', fixture: 'b', batting: { runs: 20, balls: 11, out: true } },
+  ];
+  const rows = keepRicher(previous, fresh, 'x');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[1].batting.outFrom, undefined, 'nothing is invented for a new row');
+});
+
+test('a short read still keeps the previous rows', () => {
+  // The existing guard: a re-read that lost innings must not replace what we hold.
+  const previous = [{ date: '2026-10-01', fixture: 'a' }, { date: '2026-10-02', fixture: 'b' }];
+  assert.equal(keepRicher(previous, [{ date: '2026-10-01', fixture: 'a' }], 'x').length, 2);
 });
