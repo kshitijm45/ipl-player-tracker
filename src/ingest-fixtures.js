@@ -57,7 +57,23 @@ export async function scrapeFixtures({ days = 2, squads = true, maxAgeMs = 3 * 3
 
   const browser = await chromium.launch();
   // The schedule renders its cards at desktop width, as the player pages do.
-  const page = await browser.newPage({ userAgent: UA, viewport: { width: 1600, height: 1000 } });
+  //
+  // The timezone is pinned to IST because CREX prints kick-off times in the *browser's*
+  // local zone, client-side: the same fixture reads 5:45 PM under UTC, 11:15 PM under
+  // Asia/Kolkata and 1:45 PM under America/New_York. CI runs in UTC, so every published
+  // time was a UTC one — a 7:30 PM IST start showing as 2:00 PM, and a late match
+  // landing on the wrong day entirely. Nothing in the scraped string says which zone it
+  // is, so this cannot be corrected afterwards; it has to be right when it is read.
+  //
+  // IST rather than the reader's own zone because the audience is Indian and the rest
+  // of the page — the daily tracker's date boundary, the "today" it opens on — is
+  // already IST. One zone throughout beats two that disagree at midnight.
+  const page = await browser.newPage({
+    userAgent: UA,
+    viewport: { width: 1600, height: 1000 },
+    timezoneId: 'Asia/Kolkata',
+    locale: 'en-IN',
+  });
 
   try {
     await page.goto('https://crex.com/schedule', { waitUntil: 'networkidle', timeout: 45000 });

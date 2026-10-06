@@ -281,6 +281,9 @@ export class CrexSource extends Source {
           await page.waitForTimeout(1600);
         }
 
+        // The card list is lazy-loaded, so what is on screen is not what exists.
+        await loadAllSeriesCards(page);
+
         // Card labels differ per discipline: a tournament a player only bowled in
         // has no card under Batting.
         for (const label of await page.$$eval('.sCard', (cs) =>
@@ -363,6 +366,10 @@ export class CrexSource extends Source {
               await tab.click({ timeout: 5000 }).catch(() => {});
               await page.waitForTimeout(1200);
             }
+            // Switching discipline re-renders the list from the top, so the cards
+            // past the first screenful have to be loaded again before the lookup —
+            // otherwise a series that exists is reported missing and skipped.
+            await loadAllSeriesCards(page);
             const labels = await cards.evaluateAll((els) =>
               els.map((e) => (e.textContent || '').replace(/\s+/g, ' ').trim())
             );
@@ -746,6 +753,50 @@ function mergeViews(existing, row) {
  * The competition name and the side the player turned out for both matter: the
  * latter is how a franchise is attached to an innings.
  */
+/**
+ * Scroll the series list until it stops growing.
+ *
+ * The list renders about seven cards and loads the rest only as its own container is
+ * scrolled — `.scrollSeriesEle`, not the window. Reading it without scrolling returns
+ * whatever happened to be on screen, which is why Ishan Kishan's June ODIs against
+ * Afghanistan were missing: he has 43 series cards, the seven most recent were all the
+ * walk ever saw, and the two innings sat in the 36 it never reached.
+ *
+ * Nothing about that failure looked like one. The player had rows, his page was
+ * populated, and the only symptom was a tournament quietly absent from a career that
+ * otherwise added up — and the same cap applied to every player with more than seven
+ * series.
+ *
+ * Stops when the count stops changing rather than after a fixed number of scrolls,
+ * since the list length varies from one card to a hundred. The iteration cap is there
+ * only so a list that never settles cannot hang the scrape.
+ */
+async function loadAllSeriesCards(page, { maxRounds = 40, settleMs = 650 } = {}) {
+  let previous = 0;
+  let stable = 0;
+  for (let round = 0; round < maxRounds; round++) {
+    const count = await page
+      .evaluate(() => {
+        // The container is the scrollable ancestor of the cards; fall back to the
+        // window, which is harmless where the list is short enough not to need it.
+        const el = document.querySelector('.scrollSeriesEle');
+        if (el) el.scrollTop = el.scrollHeight;
+        else window.scrollTo(0, document.body.scrollHeight);
+        return document.querySelectorAll('.sCard').length;
+      })
+      .catch(() => previous);
+    await page.waitForTimeout(settleMs);
+    if (count === previous) {
+      // Two quiet rounds, because one can land between a scroll and its render.
+      if (++stable >= 2) break;
+    } else {
+      stable = 0;
+    }
+    previous = count;
+  }
+  return previous;
+}
+
 export function parseSeriesCard(label) {
   // Anchor on the date *window* ("Apr 3 - Sep 27"), not on the first month-like
   // word: a tournament called "County Div-Two 2026" contains "Two 2026", which

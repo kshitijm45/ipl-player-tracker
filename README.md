@@ -386,6 +386,28 @@ player page cannot produce either field, so a fresh read returns rows with no ba
 bowled and everyone out — and the only symptom would be averages quietly turning back
 into dashes.
 
+## Two things the page hides
+
+**The series list is lazy-loaded.** CREX renders about seven series cards and loads the
+rest only as `.scrollSeriesEle` — its own container, not the window — is scrolled.
+Reading it unscrolled returns whatever happened to be on screen, which silently capped
+every player at seven tournaments: Ishan Kishan has 43 cards, and his June ODIs against
+Afghanistan (125 off 79, 34 off 22) sat in the 36 the walk never reached. Nothing about
+that looked like a failure. He had rows, his page was populated, and the only symptom
+was a tournament quietly absent from a career that otherwise added up.
+
+Scrolling until the count stops changing takes him from 7 cards to 43 and from 21
+innings to 26. The list is re-rendered from the top whenever the discipline tab
+switches, so it has to be re-scrolled before the per-series lookup too — otherwise a
+series that exists is reported missing and skipped.
+
+**Kick-off times are rendered in the browser's timezone**, client-side. The same
+fixture reads 5:45 PM under UTC, 11:15 PM under Asia/Kolkata and 1:45 PM under
+America/New_York. CI runs in UTC, so every published time was a UTC one — a 7:30 PM IST
+start showing as 2:00 PM, and a late match landing on the wrong day. Nothing in the
+scraped string says which zone it is, so it cannot be corrected afterwards: the fixtures
+scrape pins `timezoneId: 'Asia/Kolkata'`, and the page labels the column IST.
+
 ## Known limits
 
 - A live figure is only as good as what CREX displays mid-innings. The LIVE badge is
