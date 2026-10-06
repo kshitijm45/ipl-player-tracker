@@ -86,28 +86,69 @@ test('the match url is carried where the scrape recorded it', () => {
   assert.equal(matchesToBackfill(byPlayer)[0].matchUrl, '/cricket-live-score/x-match-updates-A');
 });
 
-test('a Test innings is matched on its innings number', () => {
-  // Taking the first row would file his second-innings figures against his first.
+test("a Test innings is matched on its figures, not its innings number", () => {
+  // The two sources count innings differently. The scorecard numbers by *match*
+  // innings, interleaving both sides (1,2,3,4); the player page numbers by the
+  // batsman's own. Ishan Kishan's 16 is match innings 3 but his 1st, and his 39 is
+  // match innings 1 but his 2nd — so matching on the number paired each with the
+  // other's figures and wrote the wrong dismissal onto both.
   const cardRows = [
-    { slug: 's', innings: 1, balls: 60, runs: 30, wickets: 1 },
-    { slug: 's', innings: 3, balls: 36, runs: 20, wickets: 2 },
+    { slug: 's', innings: 1, runs: 39, balls: 41, out: false },
+    { slug: 's', innings: 3, runs: 16, balls: 27, out: true },
   ];
-  assert.equal(pickInnings(cardRows, { slug: 's', innings: 3 }).runs, 20);
-  // An innings the scorecard does not have is not substituted with another.
-  assert.equal(pickInnings(cardRows, { slug: 's', innings: 2 }), null);
+  assert.equal(pickInnings(cardRows, { slug: 's', innings: 1, batting: { runs: 16, balls: 27 } }).out, true);
+  assert.equal(pickInnings(cardRows, { slug: 's', innings: 2, batting: { runs: 39, balls: 41 } }).out, false);
+});
+
+test('an innings the scorecard does not have is not substituted', () => {
+  const cardRows = [
+    { slug: 's', innings: 1, runs: 39, balls: 41, out: false },
+    { slug: 's', innings: 3, runs: 16, balls: 27, out: true },
+  ];
+  assert.equal(pickInnings(cardRows, { slug: 's', innings: 2, batting: { runs: 70, balls: 50 } }), null);
+});
+
+test('a bowling spell is matched on wickets as well as runs', () => {
+  // Two spells can concede the same runs; the wickets separate them, and balls
+  // faced is not a figure a bowling row has.
+  const cardRows = [
+    { slug: 's', innings: 2, runs: 45, wickets: 1, balls: 69 },
+    { slug: 's', innings: 4, runs: 45, wickets: 3, balls: 54 },
+  ];
+  assert.equal(pickInnings(cardRows, { slug: 's', innings: 1, bowling: { runs: 45, wickets: 3 } }, 'bowling').balls, 54);
+});
+
+test('two innings with identical figures are not a problem', () => {
+  // Whichever it is, the fields taken from it are the same.
+  const cardRows = [
+    { slug: 's', innings: 1, runs: 0, balls: 3, out: true },
+    { slug: 's', innings: 3, runs: 0, balls: 3, out: true },
+  ];
+  assert.equal(pickInnings(cardRows, { slug: 's', innings: 2, batting: { runs: 0, balls: 3 } }).out, true);
+});
+
+test('genuinely ambiguous rows are left alone', () => {
+  // Same runs, different dismissals: taking either would be a guess, and a wrong
+  // `out` corrupts an average with nothing downstream to reveal it.
+  const cardRows = [
+    { slug: 's', innings: 1, runs: 20, balls: 15, out: true },
+    { slug: 's', innings: 3, runs: 20, balls: 18, out: false },
+  ];
+  assert.equal(pickInnings(cardRows, { slug: 's', innings: 1, batting: { runs: 20 } }), null);
 });
 
 test('a limited-overs innings needs no innings number', () => {
   const cardRows = [{ slug: 's', innings: 1, balls: 24, runs: 30, wickets: 1 }];
-  assert.equal(pickInnings(cardRows, { slug: 's' }).balls, 24);
+  assert.equal(pickInnings(cardRows, { slug: 's', batting: { runs: 30, balls: 24 } }).balls, 24);
 });
 
 test('an ambiguous match is refused rather than guessed', () => {
   const cardRows = [
-    { slug: 's', innings: 1, balls: 60 },
-    { slug: 's', innings: 2, balls: 36 },
+    { slug: 's', innings: 1, runs: 40, balls: 60 },
+    { slug: 's', innings: 2, runs: 25, balls: 36 },
   ];
-  assert.equal(pickInnings(cardRows, { slug: 's' }), null);
+  // Nothing in the stored row identifies which spell this is.
+  assert.equal(pickInnings(cardRows, { slug: 's', bowling: {} }, 'bowling'), null);
 });
 
 test('another player\'s rows are not mine', () => {

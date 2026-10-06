@@ -47,12 +47,18 @@ export function needsScorecard(row) {
  * resolving a bare id costs, and the innings scraped before the href was kept are
  * exactly the ones that still need it.
  */
-export function matchesToBackfill(byPlayer, { force = false } = {}) {
+export function matchesToBackfill(byPlayer, { force = false, repair = false } = {}) {
   const byMatch = new Map();
+  // Matches where one player has more than one innings. These were enriched by
+  // matching on the innings number, which the two sources count differently, so a
+  // Test innings could be paired with the wrong scorecard row — and `needsScorecard`
+  // sees them as done, so they would never be re-read without this.
+  const multi = repair ? multiInningsMatches(byPlayer) : null;
   for (const rows of Object.values(byPlayer ?? {})) {
     for (const r of rows ?? []) {
       if (!r?.matchId) continue;
-      if (!force && !needsScorecard(r)) continue;
+      const mustRepair = repair && multi.has(r.matchId);
+      if (!force && !mustRepair && !needsScorecard(r)) continue;
       const m = byMatch.get(r.matchId) ?? { matchId: r.matchId, matchUrl: null, date: null };
       m.matchUrl ??= r.matchUrl ?? null;
       if (!m.date || (r.date && r.date > m.date)) m.date = r.date;
@@ -60,6 +66,22 @@ export function matchesToBackfill(byPlayer, { force = false } = {}) {
     }
   }
   return [...byMatch.values()].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+}
+
+
+/** Matches where some player has more than one innings — Tests, and nothing else. */
+function multiInningsMatches(byPlayer) {
+  const out = new Set();
+  for (const rows of Object.values(byPlayer ?? {})) {
+    const seen = new Map();
+    for (const r of rows ?? []) {
+      if (!r?.matchId || r.innings == null) continue;
+      const n = (seen.get(r.matchId) ?? 0) + 1;
+      seen.set(r.matchId, n);
+      if (n > 1) out.add(r.matchId);
+    }
+  }
+  return out;
 }
 
 /**
@@ -74,13 +96,47 @@ export function matchesToBackfill(byPlayer, { force = false } = {}) {
  * Returns null when the match has several candidates and nothing distinguishes them,
  * rather than guessing at one.
  */
-export function pickInnings(cardRows, row) {
+export function pickInnings(cardRows, row, kind = 'batting') {
   const mine = cardRows.filter((c) => c.slug === row.slug);
   if (!mine.length) return null;
-  if (row.innings != null) {
-    return mine.find((c) => c.innings === row.innings) ?? null;
+  if (mine.length === 1) return mine[0];
+
+  // Several innings for one player in one match, so they have to be told apart —
+  // and the innings number cannot do it, because the two sources count differently.
+  // The scorecard numbers by *match* innings, interleaving both sides (1,2,3,4),
+  // while the player page numbers by the batsman's own (his 1st, his 2nd). Ishan
+  // Kishan's 16 is match innings 3 but his 1st; his 39 is match innings 1 but his
+  // 2nd. Matching on the number paired each with the other's figures and wrote the
+  // wrong dismissal onto both — 124 of 192 multi-innings matches had the signature.
+  //
+  // The figures identify the innings unambiguously: runs off balls is what a
+  // scorecard and a player page agree on, being the same innings printed twice.
+  const stored = row[kind] ?? {};
+  const exact = mine.filter(
+    (c) => c.runs === stored.runs && (c.balls == null || stored.balls == null || c.balls === stored.balls)
+  );
+  if (exact.length === 1) return exact[0];
+
+  // Runs alone, where balls differ or are absent — a bowling row has no balls faced
+  // to compare, and its wickets are the distinguishing figure instead.
+  const byFigure = mine.filter((c) =>
+    kind === 'bowling'
+      ? c.runs === stored.runs && c.wickets === stored.wickets
+      : c.runs === stored.runs
+  );
+  if (byFigure.length === 1) return byFigure[0];
+
+  // Two innings with identical figures: whichever it is, the fields taken from it
+  // are the same, so the ambiguity does not matter. Anything else is unresolved and
+  // is left alone rather than guessed at.
+  if (byFigure.length > 1) {
+    const [first] = byFigure;
+    const same = byFigure.every(
+      (c) => c.out === first.out && c.balls === first.balls && c.wickets === first.wickets
+    );
+    return same ? first : null;
   }
-  return mine.length === 1 ? mine[0] : null;
+  return null;
 }
 
 /**
@@ -96,6 +152,7 @@ export function enrich(byPlayer, card, { matchId, slugs = new Map() } = {}) {
   let notOuts = 0;
   let ballsAdded = 0;
   let conflicts = 0;
+  let corrected = 0;
 
   for (const [playerId, playerRows] of Object.entries(byPlayer ?? {})) {
     const slug = slugs.get?.(playerId) ?? slugs[playerId];
@@ -106,11 +163,16 @@ export function enrich(byPlayer, card, { matchId, slugs = new Map() } = {}) {
       let touched = false;
 
       if (row.bowling) {
-        const b = pickInnings(card.bowling ?? [], { ...row, slug });
+        const b = pickInnings(card.bowling ?? [], { ...row, slug }, 'bowling');
         if (b && b.balls != null) {
           if (row.bowling.balls == null) {
             row.bowling.balls = b.balls;
             ballsAdded++;
+          } else if (row.bowling.balls !== b.balls) {
+            // Same cause as a wrong dismissal: the figures now identify the innings,
+            // so a disagreement means the earlier pairing was wrong.
+            row.bowling.balls = b.balls;
+            corrected++;
           }
           if (b.maidens != null) row.bowling.maidens ??= b.maidens;
           // CREX's own printed economy. The site computes its own from summed balls;
@@ -127,11 +189,14 @@ export function enrich(byPlayer, card, { matchId, slugs = new Map() } = {}) {
       }
 
       if (row.batting) {
-        const b = pickInnings(card.batting ?? [], { ...row, slug });
+        const b = pickInnings(card.batting ?? [], { ...row, slug }, 'batting');
         // Only a dismissal the scorecard actually stated counts. An unreadable
         // `.decision` cell leaves the innings unknown, which suppresses the average
         // rather than flattering it.
         if (b && b.out != null) {
+          // Overwritten rather than filled in: an earlier run may have matched this
+          // innings to the wrong scorecard row and written a confident, wrong `out`.
+          if (row.batting.outFrom === 'scorecard' && row.batting.out !== b.out) corrected++;
           row.batting.out = b.out;
           row.batting.outFrom = 'scorecard';
           if (b.out === false) notOuts++;
@@ -149,5 +214,5 @@ export function enrich(byPlayer, card, { matchId, slugs = new Map() } = {}) {
     }
   }
 
-  return { rows, notOuts, ballsAdded, conflicts };
+  return { rows, notOuts, ballsAdded, conflicts, corrected };
 }

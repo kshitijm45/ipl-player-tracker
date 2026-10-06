@@ -42,6 +42,10 @@ on:
         description: 'Cap how many scorecards to read this run (blank = all)'
         type: string
         default: ''
+      repair_scorecards:
+        description: 'Re-read multi-innings (Test) matches to fix mismatched innings'
+        type: boolean
+        default: false
 
 # One refresh at a time: two runs would race on the same commit.
 #
@@ -133,12 +137,20 @@ jobs:
         # `scorecard_limit` exists because the full backlog is ~750 matches at about
         # six seconds each. Run it in a few passes if a single job would crowd out the
         # scrape; each pass resumes where the last stopped.
-        if: ${{ inputs.scorecards }}
+        if: ${{ inputs.scorecards || inputs.repair_scorecards }}
+        env:
+          # Re-reads matches where one player has several innings. They were first
+          # enriched by matching on the innings number, which the two sources count
+          # differently — the scorecard by match innings, interleaving both sides, the
+          # player page by the batsman's own — so an innings could take the wrong
+          # scorecard row and a confident, wrong dismissal with it. Those rows look
+          # finished to the ordinary pass, so only this re-reads them.
+          REPAIR: ${{ inputs.repair_scorecards && '--repair' || '' }}
         run: |
           if [ -n "${{ inputs.scorecard_limit }}" ]; then
-            node src/backfill-scorecards.js --limit=${{ inputs.scorecard_limit }} || true
+            node src/backfill-scorecards.js $REPAIR --limit=${{ inputs.scorecard_limit }} || true
           else
-            node src/backfill-scorecards.js || true
+            node src/backfill-scorecards.js $REPAIR || true
           fi
 
       - name: Read new matches' scorecards
@@ -146,7 +158,7 @@ jobs:
         # balls bowled and not-outs have to come from somewhere. Capped so a day with
         # an unreadable backlog cannot stretch the job, and skipped entirely on the
         # run that is doing the full backfill.
-        if: ${{ !inputs.scorecards }}
+        if: ${{ !inputs.scorecards && !inputs.repair_scorecards }}
         run: node src/backfill-scorecards.js --limit=60 || true
 
       - name: Build the site

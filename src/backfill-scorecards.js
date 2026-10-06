@@ -21,6 +21,7 @@
  *   node src/backfill-scorecards.js --dry      # report without writing
  *   node src/backfill-scorecards.js --limit=5  # try a few first
  *   node src/backfill-scorecards.js --force    # re-read matches already done
+ *   node src/backfill-scorecards.js --repair   # re-read multi-innings (Test) matches
  *
  * Safe to re-run and safe to interrupt: a match whose innings are already enriched is
  * skipped, so an interrupted run resumes rather than starting over. Writes happen
@@ -101,6 +102,7 @@ export async function backfillScorecards({
   limit = Infinity,
   dry = false,
   force = false,
+  repair = false,
   log = console.log,
 } = {}) {
   if (!existsSync(PERF)) {
@@ -112,7 +114,7 @@ export async function backfillScorecards({
   const byPlayer = store.byPlayer ?? {};
   const slugs = loadSlugs();
 
-  const pending = matchesToBackfill(byPlayer, { force });
+  const pending = matchesToBackfill(byPlayer, { force, repair });
   const total = pending.length;
   const todo = pending.slice(0, limit === Infinity ? undefined : limit);
 
@@ -136,6 +138,7 @@ export async function backfillScorecards({
   let enrichedRows = 0;
   let notOuts = 0;
   let ballsAdded = 0;
+  let corrected = 0;
   let sinceSave = 0;
 
   for (const [i, m] of todo.entries()) {
@@ -152,11 +155,13 @@ export async function backfillScorecards({
     enrichedRows += result.rows;
     notOuts += result.notOuts;
     ballsAdded += result.ballsAdded;
+    corrected += result.corrected ?? 0;
 
     log(
       `  ${i + 1}/${todo.length} ${m.matchId} — ${result.rows} innings` +
         `${result.notOuts ? `, ${result.notOuts} not out` : ''}` +
-        `${result.ballsAdded ? `, ${result.ballsAdded} with balls bowled` : ''}`
+        `${result.ballsAdded ? `, ${result.ballsAdded} with balls bowled` : ''}` +
+        `${result.corrected ? `, ${result.corrected} corrected` : ''}`
     );
 
     if (!dry && ++sinceSave >= SAVE_EVERY) {
@@ -171,9 +176,10 @@ export async function backfillScorecards({
 
   log(
     `\nread ${read}/${todo.length} scorecards (${failed} unreadable), ` +
-      `enriched ${enrichedRows} innings: ${notOuts} not-outs, ${ballsAdded} with balls bowled`
+      `enriched ${enrichedRows} innings: ${notOuts} not-outs, ${ballsAdded} with balls bowled` +
+      `${corrected ? `, ${corrected} corrected` : ''}`
   );
-  return { matches: read, failed, enriched: enrichedRows, notOuts, ballsAdded };
+  return { matches: read, failed, enriched: enrichedRows, notOuts, ballsAdded, corrected };
 }
 
 function save(store, byPlayer) {
@@ -191,6 +197,7 @@ if (isMain) {
     limit: arg('limit') ? Number(arg('limit')) : Infinity,
     dry: has('dry'),
     force: has('force'),
+    repair: has('repair'),
   }).catch((err) => {
     console.error(err);
     process.exit(1);

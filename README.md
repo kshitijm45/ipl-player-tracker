@@ -364,12 +364,31 @@ An average is shown only once **every** innings' dismissal is known. A single un
 suppresses it, because the error runs one way — an unrecorded not-out is counted as an
 out — so the figure would always flatter, with nothing on the page to reveal it.
 
+### Which innings is which
+
+The two sources number innings differently, and nothing says so on either page. The
+scorecard numbers by **match** innings, interleaving both sides (1, 2, 3, 4); the player
+page numbers by the **batsman's own** (his 1st, his 2nd). Ishan Kishan's 16 is match
+innings 3 but his 1st, and his 39 is match innings 1 but his 2nd.
+
+Pairing them on that number therefore matched each innings with the other's scorecard
+row and wrote a confident, wrong dismissal onto both — 124 of 192 multi-innings matches
+carried the signature, and the rows looked finished, so the ordinary pass would never
+re-read them.
+
+Innings are matched on their **figures** instead: runs off balls is what a scorecard and
+a player page agree on, being the same innings printed twice. Two innings with identical
+figures are not a problem, since whichever is taken contributes the same fields; anything
+still ambiguous is left alone. `--repair` re-reads the multi-innings matches and
+overwrites what the number-matching got wrong.
+
 ### Running the backfill
 
 ```bash
 node src/backfill-scorecards.js            # every match in the data (~75 min)
 node src/backfill-scorecards.js --dry      # report without writing
 node src/backfill-scorecards.js --limit=5  # try a few first
+node src/backfill-scorecards.js --repair   # re-read Tests after the innings-match fix
 ```
 
 It runs **once**, not daily. The enriched rows are committed with the rest of `data/`,
