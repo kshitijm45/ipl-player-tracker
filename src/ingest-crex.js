@@ -155,11 +155,73 @@ export const LIVE_FEED_PAGES = Number(process.env.LIVE_FEED_PAGES) || 30;
  * preserve rows that CREX has corrected or withdrawn, and this project's rule is that
  * what CREX currently prints is what the site shows.
  */
-export function keepRicher(previous, fresh, slug) {
+export function keepRicher(previous, fresh, slug, { today } = {}) {
   if (!Array.isArray(previous) || previous.length === 0) return fresh;
-  if (fresh.length >= previous.length) return carryScorecard(previous, fresh);
+  if (fresh.length >= previous.length) {
+    return carryScorecard(previous, restoreSettled(previous, fresh, slug, today));
+  }
   shortReads.push({ slug, had: previous.length, got: fresh.length });
   return previous;
+}
+
+/**
+ * How long an innings can still legitimately change.
+ *
+ * A week is far longer than any format needs — a Test is five days — so anything
+ * older has a figure that is final. The margin is deliberate: a late correction to a
+ * scorecard, or a match dated a day out, should not make a settled innings eligible
+ * to be dropped.
+ */
+export const SETTLED_AFTER_DAYS = 7;
+
+/**
+ * Put back innings the re-read lost, where they are too old to have changed.
+ *
+ * The count check above only catches a scrape that comes back *smaller*. It cannot
+ * see a read that loses an old series while gaining new matches, because the total
+ * holds or rises — and that is not hypothetical: the series list is lazy-loaded, and
+ * reading it unscrolled silently capped every player at seven tournaments. A player
+ * who had played twice since would have had his July cricket replaced by it, with
+ * the row count going up.
+ *
+ * So an innings older than `SETTLED_AFTER_DAYS` that the fresh read does not contain
+ * is restored rather than dropped. Nothing recent is protected this way: a live or
+ * just-finished match must stay replaceable, since its figure is exactly what the
+ * re-read exists to update.
+ *
+ * This cannot resurrect a row that CREX genuinely removed — a match voided, or an
+ * innings corrected away. That is the trade, and it is the right way round: a
+ * tournament vanishing from a player's history is both far more likely and far
+ * harder to notice than a stale row surviving.
+ */
+function restoreSettled(previous, fresh, slug, today = istDay()) {
+  const cutoff = new Date(Date.parse(`${today}T00:00:00Z`) - SETTLED_AFTER_DAYS * 864e5)
+    .toISOString()
+    .slice(0, 10);
+  const key = (r) => `${r.date ?? ''}|${r.format ?? ''}|${r.fixture ?? ''}|${r.innings ?? ''}`;
+  const have = new Set(fresh.map(key));
+  const restored = previous.filter((r) => r.date && r.date < cutoff && !have.has(key(r)));
+  if (!restored.length) return fresh;
+  lostSettled.push({ slug, restored: restored.length });
+  // Newest first, as the rest of the pipeline expects.
+  return [...fresh, ...restored].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+}
+
+/**
+ * Today on the clock this project runs on. IST rather than UTC, for the same reason
+ * the scrape stamps `observedOn` that way: the job fires at 00:00 IST, when UTC is
+ * still yesterday, and a UTC cutoff would protect a day less than it means to.
+ */
+function istDay() {
+  return new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+}
+
+/** Players whose re-read lost innings old enough to be settled. */
+const lostSettled = [];
+
+/** What was restored this run, for the scrape's summary. */
+export function settledRestores() {
+  return lostSettled.slice();
 }
 
 /**
@@ -354,6 +416,21 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
       console.log(`    ${s.slug} — had ${s.had}, read ${s.got}`);
     }
     if (shortReads.length > 12) console.log(`    …and ${shortReads.length - 12} more`);
+  }
+  if (lostSettled.length) {
+    // Worth naming for the same reason: a read that keeps losing an old tournament
+    // is a scrape problem to chase, not something the restore should quietly paper
+    // over run after run.
+    const n = lostSettled.reduce((a, x) => a + x.restored, 0);
+    console.log(
+      `  ${n} settled innings restored across ${lostSettled.length} player` +
+        `${lostSettled.length === 1 ? '' : 's'} (older than ${SETTLED_AFTER_DAYS} days ` +
+        'and missing from the re-read):'
+    );
+    for (const s of lostSettled.slice(0, 12)) {
+      console.log(`    ${s.slug} — ${s.restored} restored`);
+    }
+    if (lostSettled.length > 12) console.log(`    …and ${lostSettled.length - 12} more`);
   }
   if (multi.matches) {
     console.log(

@@ -11,7 +11,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cacheMs, keepRicher } from './ingest-crex.js';
+import { cacheMs, keepRicher, SETTLED_AFTER_DAYS } from './ingest-crex.js';
 
 const H = 3600e3;
 
@@ -147,4 +147,87 @@ test('a short read still keeps the previous rows', () => {
   // The existing guard: a re-read that lost innings must not replace what we hold.
   const previous = [{ date: '2026-10-01', fixture: 'a' }, { date: '2026-10-02', fixture: 'b' }];
   assert.equal(keepRicher(previous, [{ date: '2026-10-01', fixture: 'a' }], 'x').length, 2);
+});
+
+/* ── losing settled innings ──
+   The count check only catches a re-read that comes back smaller. It cannot see one
+   that loses an old series while gaining new matches, because the total holds or
+   rises — and that is not hypothetical: the series list is lazy-loaded, and reading
+   it unscrolled capped every player at seven tournaments. A player who had played
+   twice since would have had his July cricket quietly replaced by it. */
+
+const DAY = 864e5;
+const ago = (n, today = '2026-10-06') =>
+  new Date(Date.parse(`${today}T00:00:00Z`) - n * DAY).toISOString().slice(0, 10);
+
+test('a settled innings the re-read lost is put back', () => {
+  const previous = [
+    { date: ago(90), competition: 'TNPL 2026', fixture: 'a', batting: { runs: 50, balls: 30 } },
+    { date: ago(2), competition: 'CSA T20 2026', fixture: 'c', batting: { runs: 10, balls: 8 } },
+  ];
+  // Same length, so the count guard passes — but July is gone and a new match is in.
+  const fresh = [
+    { date: ago(2), competition: 'CSA T20 2026', fixture: 'c', batting: { runs: 10, balls: 8 } },
+    { date: ago(1), competition: 'CSA T20 2026', fixture: 'd', batting: { runs: 5, balls: 4 } },
+  ];
+  const rows = keepRicher(previous, fresh, 'x', { today: '2026-10-06' });
+  assert.equal(rows.length, 3);
+  assert.ok(rows.some((r) => r.competition === 'TNPL 2026'), 'the July innings survived');
+  assert.ok(rows.some((r) => r.fixture === 'd'), 'the new match was still added');
+});
+
+test('restored rows keep the newest-first order', () => {
+  const previous = [{ date: ago(90), fixture: 'old', batting: { runs: 1, balls: 1 } }];
+  const fresh = [{ date: ago(1), fixture: 'new', batting: { runs: 2, balls: 2 } }];
+  const rows = keepRicher(previous, fresh, 'x', { today: '2026-10-06' });
+  assert.deepEqual(rows.map((r) => r.fixture), ['new', 'old']);
+});
+
+test('a recent innings stays replaceable', () => {
+  // The whole point of a re-read. Mukesh Kumar was stored at 84 (102) during an
+  // innings he finished on 0 (0); protecting that figure would freeze the error in.
+  const previous = [{ date: ago(0), fixture: 'live', batting: { runs: 84, balls: 102 } }];
+  const fresh = [{ date: ago(0), fixture: 'live', batting: { runs: 0, balls: 1 } }];
+  const rows = keepRicher(previous, fresh, 'x', { today: '2026-10-06' });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].batting.runs, 0, 'the corrected figure won');
+});
+
+test('an innings inside the settling window is not protected', () => {
+  // Six days is still inside a week, so it can legitimately change or be corrected.
+  const previous = [{ date: ago(6), fixture: 'recent', batting: { runs: 20, balls: 10 } }];
+  const fresh = [{ date: ago(1), fixture: 'other', batting: { runs: 3, balls: 3 } }];
+  const rows = keepRicher(previous, fresh, 'x', { today: '2026-10-06' });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].fixture, 'other');
+});
+
+test('a Test is well inside the window', () => {
+  // Five days of play, so the cutoff has to be longer than any format can run.
+  assert.ok(SETTLED_AFTER_DAYS > 5);
+});
+
+test('nothing is restored when the re-read is complete', () => {
+  const previous = [{ date: ago(90), fixture: 'a', batting: { runs: 1, balls: 1 } }];
+  const fresh = [
+    { date: ago(90), fixture: 'a', batting: { runs: 1, balls: 1 } },
+    { date: ago(1), fixture: 'b', batting: { runs: 2, balls: 2 } },
+  ];
+  const rows = keepRicher(previous, fresh, 'x', { today: '2026-10-06' });
+  assert.equal(rows.length, 2, 'no duplicate of the row that was already there');
+});
+
+test('the two innings of a Test are restored separately', () => {
+  // Keyed on the innings number too, or restoring one would mask the loss of the other.
+  const previous = [
+    { date: ago(90), fixture: 'Test', innings: 1, batting: { runs: 10, balls: 20 } },
+    { date: ago(90), fixture: 'Test', innings: 2, batting: { runs: 30, balls: 40 } },
+  ];
+  const fresh = [
+    { date: ago(90), fixture: 'Test', innings: 1, batting: { runs: 10, balls: 20 } },
+    { date: ago(1), fixture: 'new', batting: { runs: 5, balls: 5 } },
+  ];
+  const rows = keepRicher(previous, fresh, 'x', { today: '2026-10-06' });
+  assert.equal(rows.length, 3);
+  assert.ok(rows.some((r) => r.innings === 2), 'the second innings came back');
 });

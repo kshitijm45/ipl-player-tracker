@@ -427,6 +427,34 @@ start showing as 2:00 PM, and a late match landing on the wrong day. Nothing in 
 scraped string says which zone it is, so it cannot be corrected afterwards: the fixtures
 scrape pins `timezoneId: 'Asia/Kolkata'`, and the page labels the column IST.
 
+## Not losing a tournament on a re-read
+
+A player's rows are replaced wholesale by each scrape, and the guard against a bad
+read was a count: a re-read returning fewer rows than are already held is rejected and
+the previous ones kept. That catches a scrape that comes back empty or short.
+
+It cannot catch a read that **loses an old series while gaining new matches**, because
+the total holds or rises. That is not hypothetical — the series list is lazy-loaded,
+and reading it unscrolled capped every player at seven tournaments. A player who had
+played twice since would have had his July cricket silently replaced, with the row
+count going *up*.
+
+So an innings more than **seven days old** that the fresh read does not contain is
+restored rather than dropped. Nothing newer is protected: a live or just-finished
+match must stay replaceable, since updating it is what the re-read is for — Mukesh
+Kumar was stored at 84 (102) during an innings he finished on 0 (0), and freezing that
+figure would have been worse than losing it. Seven days is comfortably longer than any
+format runs, a Test being five, so anything past it has a figure that is final.
+
+The restores are named in the scrape summary rather than applied quietly, because a
+read that keeps losing the same tournament is a bug to chase, not something to paper
+over run after run.
+
+What this cannot do is resurrect a row CREX genuinely removed — a match voided, or an
+innings corrected away. That is the trade, and it is the right way round: a tournament
+vanishing from a player's history is both likelier and far harder to notice than a
+stale row surviving.
+
 ## Known limits
 
 - A live figure is only as good as what CREX displays mid-innings. The LIVE badge is
@@ -441,6 +469,8 @@ scrape pins `timezoneId: 'Asia/Kolkata'`, and the page labels the column IST.
 - Forty players have no post-IPL cricket yet, so their pages stay empty until they play.
 - A surname collision can still mispin a player to the wrong CREX page. Two have been
   found; both were caught by hand, and nothing in the build would stop a third.
+- An innings older than a week that CREX genuinely withdraws is kept rather than
+  removed, since nothing distinguishes a withdrawal from a failed read.
 - A batting average is missing until every one of that player's innings has been read
   from a scorecard, so averages appear gradually as the backfill proceeds rather than
   all at once. Economy and bowling strike rate are computed from whichever innings have
