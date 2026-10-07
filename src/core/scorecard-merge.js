@@ -33,6 +33,15 @@ export function needsScorecard(row) {
   if (row.bowling && row.bowling.balls == null) return true;
   // A batting innings whose dismissal did not come from a scorecard has no average.
   if (row.batting && row.batting.outFrom !== 'scorecard') return true;
+  // Enriched before the award was ever read, so the match was never asked who won it.
+  //
+  // Without this the gap is permanent rather than temporary: 706 matches were marked
+  // complete by runs that predate player-of-the-match, and a complete row never
+  // re-enters the queue. Shreyas Iyer's 102 off 43 won him the match and would have
+  // stayed unbadged for good, on the same page as David Miller's badged 142 — and an
+  // absent badge would mean "never checked" for some matches and "did not win" for
+  // others, with nothing to tell them apart.
+  if (row.scorecardAt && !row.awardChecked) return true;
   return false;
 }
 
@@ -146,7 +155,15 @@ export function pickInnings(cardRows, row, kind = 'batting') {
  * not-outs and the balls recovered, and a count of "innings touched" alone would not
  * say whether it worked.
  */
-export function enrich(byPlayer, card, { matchId, slugs = new Map(), potm = null } = {}) {
+export function enrich(
+  byPlayer,
+  card,
+  { matchId, slugs = new Map(), potm, awardLookedFor } = {}
+) {
+  // Whether the award was looked up at all, as opposed to looked up and not found.
+  // A caller that passes `potm: null` tried and the match named nobody; one that
+  // omits it did not try, and claiming otherwise would bury the award for good.
+  const checked = awardLookedFor ?? potm !== undefined;
   const id = matchId ?? card?.matchId;
   let rows = 0;
   let notOuts = 0;
@@ -214,6 +231,13 @@ export function enrich(byPlayer, card, { matchId, slugs = new Map(), potm = null
         if (!row.playerOfMatch) awards++;
         row.playerOfMatch = true;
         touched = true;
+      }
+      // Recorded whether or not an award was found, because "checked and nobody was
+      // named" and "never checked" have to be distinguishable — otherwise every match
+      // without an award is re-read on every run, for ever.
+      if (checked) {
+        if (!row.awardChecked) touched = true;
+        row.awardChecked = true;
       }
 
       if (touched) {

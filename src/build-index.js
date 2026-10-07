@@ -358,6 +358,34 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
     (r) => !r.matchId || !replaced.has(`${r.playerId}|${r.matchId}|${r.innings ?? 1}`)
   );
 
+  // Carry the scorecard's fields onto the re-dated row.
+  //
+  // A replaced row brings its figures from the day snapshots, which were taken before
+  // the scorecard was ever read — so the dismissal, the balls bowled and the award are
+  // all absent from it, and replacing the scraped row silently drops them. Ishan
+  // Kishan's five Duleep innings were fully enriched in `data/` and still published
+  // with no average, because every one of them is a Test innings and every Test
+  // innings takes this path.
+  //
+  // Only the fields the scorecard owns are copied. The figures and the date stay the
+  // store's, which is the whole reason the row was replaced.
+  const enrichedByKey = new Map();
+  for (const r of crexRows) {
+    if (!r.matchId) continue;
+    enrichedByKey.set(`${r.playerId}|${r.matchId}|${r.innings ?? 1}`, r);
+  }
+  for (const r of dayRows) {
+    const src = enrichedByKey.get(`${r.playerId}|${r.matchId}|${r.inningsNo ?? 1}`);
+    if (!src) continue;
+    if (src.batting?.outFrom === 'scorecard' && r.batting) {
+      r.batting = { ...r.batting, out: src.batting.out, outFrom: 'scorecard' };
+    }
+    if (src.bowling?.balls != null && r.bowling) {
+      r.bowling = { ...r.bowling, balls: src.bowling.balls };
+    }
+    if (src.playerOfMatch) r.playerOfMatch = true;
+  }
+
   const performances = mergePerformances({
     crexRows: keptCrex.concat(dayRows),
     cricsheetRows,

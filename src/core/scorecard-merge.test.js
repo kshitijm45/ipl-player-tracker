@@ -282,3 +282,41 @@ test('re-running does not double-count an award', () => {
   enrich(byPlayer, card, { slugs, potm: 'shubman-gill-O5' });
   assert.equal(enrich(byPlayer, card, { slugs, potm: 'shubman-gill-O5' }).awards, 0);
 });
+
+test('a match enriched before awards existed is read again', () => {
+  // 706 matches were marked complete by runs that predate player-of-the-match. A
+  // complete row never re-enters the queue, so without this the gap is permanent:
+  // Shreyas Iyer's match-winning 102 would stay unbadged beside Miller's badged 142.
+  const old = {
+    scorecardAt: '2026-10-05',
+    batting: { runs: 102, balls: 43, out: true, outFrom: 'scorecard' },
+  };
+  assert.equal(needsScorecard(old), true);
+});
+
+test('a match already checked for an award is left alone', () => {
+  // "Checked and nobody was named" must be distinguishable from "never checked", or
+  // every award-less match is re-read on every run for ever.
+  const done = {
+    scorecardAt: '2026-10-07',
+    awardChecked: true,
+    batting: { runs: 102, balls: 43, out: true, outFrom: 'scorecard' },
+  };
+  assert.equal(needsScorecard(done), false);
+});
+
+test('the check is recorded even when no award was named', () => {
+  const byPlayer = { p1: [{ matchId: '11AJ', batting: { runs: 223, balls: 133, out: true } }] };
+  enrich(byPlayer, card, { slugs, potm: null });
+  assert.equal(byPlayer.p1[0].awardChecked, true);
+  assert.equal(byPlayer.p1[0].playerOfMatch, undefined);
+  assert.equal(needsScorecard(byPlayer.p1[0]), false, 'and it does not come back');
+});
+
+test('a caller that cannot look up the award does not mark it checked', () => {
+  // The match page may be unreadable while the scorecard is fine. Claiming the award
+  // was checked would bury it.
+  const byPlayer = { p1: [{ matchId: '11AJ', batting: { runs: 223, balls: 133, out: true } }] };
+  enrich(byPlayer, card, { slugs, potm: undefined });
+  assert.equal(byPlayer.p1[0].awardChecked, undefined);
+});
