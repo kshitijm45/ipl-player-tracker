@@ -1858,7 +1858,11 @@ function spanNote(r) {
 function bigRow(r, p) {
   const c = p ? club1(p) : '';
   const b = r.batting, w = r.bowling;
-  const lead = b && b.balls && b.runs >= (w?.wickets ?? 0) * 20
+  // Which discipline the card leads with, decided by the same model that ranked this
+  // performance in the first place. It used a hardcoded twenty runs a wicket, so the
+  // headline could lead on batting while the row beneath it led on bowling for the
+  // very same innings.
+  const lead = b && b.balls && impactOf(r, 'batting') >= impactOf(r, 'bowling')
     ? { v: `${b.runs}${b.out ? '' : '*'}`, l: `off ${b.balls} balls` }
     : w && w.wickets
       ? { v: `${w.wickets}/${w.runs}`, l: w.overs ? `in ${w.overs} overs` : 'wickets' }
@@ -1885,7 +1889,7 @@ function bigRow(r, p) {
       <div class="hl-name">${esc(p?.name ?? r.name)}</div>
       <div class="hl-ctx"><b>${esc(c || '—')}</b> · ${esc(comp(r.competition))} · ${esc(sides(r))}${
         day ? ` · ${esc(day)}` : ''}</div>
-      ${live ? `<div class="hl-live">${live}</div>` : ''}
+      ${potm || live ? `<div class="hl-live">${potm}${live}</div>` : ''}
     </div>
     <div class="hl-fig"><b>${lead.v}</b><span>${lead.l}</span></div>
   </button>`;
