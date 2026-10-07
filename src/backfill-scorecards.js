@@ -33,7 +33,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { fetchFullScorecard } from './sources/crex-scorecard.js';
+import { fetchFullScorecard, fetchPlayerOfMatch } from './sources/crex-scorecard.js';
 import { enrich, needsScorecard, matchesToBackfill } from './core/scorecard-merge.js';
 
 const PERF = new URL('../data/crex-performances.json', import.meta.url).pathname;
@@ -139,6 +139,7 @@ export async function backfillScorecards({
   let notOuts = 0;
   let ballsAdded = 0;
   let corrected = 0;
+  let awards = 0;
   let sinceSave = 0;
 
   for (const [i, m] of todo.entries()) {
@@ -151,17 +152,22 @@ export async function backfillScorecards({
     }
     read++;
 
-    const result = enrich(byPlayer, card, { matchId: m.matchId, slugs });
+    // One extra request per match, for the award that sits on the match page rather
+    // than its scorecard tab. Null where none is named, which is routine.
+    const potm = await fetchPlayerOfMatch({ matchUrl: m.matchUrl ?? card.url });
+    const result = enrich(byPlayer, card, { matchId: m.matchId, slugs, potm });
     enrichedRows += result.rows;
     notOuts += result.notOuts;
     ballsAdded += result.ballsAdded;
     corrected += result.corrected ?? 0;
+    awards += result.awards ?? 0;
 
     log(
       `  ${i + 1}/${todo.length} ${m.matchId} — ${result.rows} innings` +
         `${result.notOuts ? `, ${result.notOuts} not out` : ''}` +
         `${result.ballsAdded ? `, ${result.ballsAdded} with balls bowled` : ''}` +
-        `${result.corrected ? `, ${result.corrected} corrected` : ''}`
+        `${result.corrected ? `, ${result.corrected} corrected` : ''}` +
+        `${result.awards ? ', player of the match' : ''}`
     );
 
     if (!dry && ++sinceSave >= SAVE_EVERY) {

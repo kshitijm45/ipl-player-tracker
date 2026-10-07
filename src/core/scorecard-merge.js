@@ -146,13 +146,14 @@ export function pickInnings(cardRows, row, kind = 'batting') {
  * not-outs and the balls recovered, and a count of "innings touched" alone would not
  * say whether it worked.
  */
-export function enrich(byPlayer, card, { matchId, slugs = new Map() } = {}) {
+export function enrich(byPlayer, card, { matchId, slugs = new Map(), potm = null } = {}) {
   const id = matchId ?? card?.matchId;
   let rows = 0;
   let notOuts = 0;
   let ballsAdded = 0;
   let conflicts = 0;
   let corrected = 0;
+  let awards = 0;
 
   for (const [playerId, playerRows] of Object.entries(byPlayer ?? {})) {
     const slug = slugs.get?.(playerId) ?? slugs[playerId];
@@ -207,6 +208,14 @@ export function enrich(byPlayer, card, { matchId, slugs = new Map() } = {}) {
         }
       }
 
+      // The award belongs to the match, so it is stamped on every innings that player
+      // had in it — a Test gives him two, and either may be the one a reader opens.
+      if (potm && slug === potm) {
+        if (!row.playerOfMatch) awards++;
+        row.playerOfMatch = true;
+        touched = true;
+      }
+
       if (touched) {
         rows++;
         row.scorecardAt = new Date().toISOString().slice(0, 10);
@@ -214,5 +223,5 @@ export function enrich(byPlayer, card, { matchId, slugs = new Map() } = {}) {
     }
   }
 
-  return { rows, notOuts, ballsAdded, conflicts, corrected };
+  return { rows, notOuts, ballsAdded, conflicts, corrected, awards };
 }

@@ -145,6 +145,55 @@ export function parseScorecard(html) {
 }
 
 /**
+ * Who was named player of the match.
+ *
+ * Not on the scorecard tab — it sits on the match page itself, in a
+ * `.player-of-match-card` block whose only `/player/` link is the winner. That is the
+ * same slug this project pins, so no name matching is needed.
+ *
+ * Returns null where the award is not shown, which covers a match still being played,
+ * a washout, and the many domestic fixtures that never name one. A missing award is
+ * not an error and must never be rendered as "nobody won it".
+ */
+export function parsePlayerOfMatch(html) {
+  const block = String(html ?? '').match(
+    /class="player-of-match-card"[\s\S]{0,4000}?<\/app-|class="player-of-match-card"[\s\S]{0,4000}$/
+  )?.[0];
+  if (!block) return null;
+  const slug = block.match(/\/player\/([A-Za-z0-9-]+)/)?.[1];
+  return slug ?? null;
+}
+
+/**
+ * Fetch the match page and read its award.
+ *
+ * A separate request from the scorecard, because the two live on different tabs. It is
+ * only worth making once per match and only for a finished one, so the caller decides
+ * when; this just reads it.
+ */
+export async function fetchPlayerOfMatch(
+  { matchUrl } = {},
+  { fetchImpl = fetch, timeoutMs = 25000 } = {}
+) {
+  if (!matchUrl) return null;
+  // The award is on the match page, not its scorecard tab.
+  const url = (matchUrl.startsWith('http') ? matchUrl : `https://crex.com${matchUrl}`)
+    .replace(/\/$/, '')
+    .replace(/\/match-scorecard$/, '');
+  try {
+    const res = await fetchImpl(url, {
+      headers: { 'User-Agent': UA },
+      redirect: 'follow',
+      signal: AbortSignal.timeout?.(timeoutMs),
+    });
+    if (!res.ok) return null;
+    return parsePlayerOfMatch(await res.text());
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The canonical match URL for a bare match id.
  *
  * Needed only for innings scraped before the scrape began keeping the full href: the

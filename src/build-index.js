@@ -14,6 +14,7 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { careersByPlayer } from './core/career-stats.js';
+import { impact } from './core/impact.js';
 import { PlayerRegistry } from './core/registry.js';
 import { loadSquadFile, resolveSquads, classifySquad } from './core/squads.js';
 import { displayName, stripDisambiguator } from './core/display-name.js';
@@ -66,18 +67,48 @@ const DEPRIORITISED = /Qualifier|Sub Regional|Continental Cup|European Cup|Asian
  * a session has ended: today's Test rows are therefore held back until tomorrow,
  * rather than captured mid-session.
  */
-function unfinishedTest(row, today) {
+function unfinishedTest(row, today, ends = null) {
   const d = String(row?.date ?? '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
   // The shared predicate, so "which formats run past midnight" is answered in one
   // place. This copy was a substring match and the store's was anchored, so the two
   // could disagree about the same innings.
   if (!isMultiDay(row?.format)) return false;
+
+  // A match whose last day has passed is over, whatever the date arithmetic says.
+  //
+  // The five-day window is a guess standing in for knowledge: it marks an innings
+  // live because a Test *could* still be running, not because this one is. The Irani
+  // Cup final ended on 5 October and its innings still read TEST IN PROGRESS on the
+  // 7th, because the row was dated the 3rd and the 3rd is inside five days of the
+  // 7th. CREX states the end date on the match page and the store keeps it, so where
+  // it is known it settles the question outright.
+  //
+  // `status` is not used for this. It is written when the match page is read and is
+  // never revisited, so a match observed while live stays "Live" in the store for
+  // good — which is the same staleness in a different field.
+  const endDate = ends?.get?.(row?.matchId);
+  if (endDate && endDate < today) return false;
+
   // Earlier than today (the day's play is over) but inside the match's five days.
   const earliest = new Date(Date.parse(today) - (MAX_TEST_DAYS - 1) * 864e5)
     .toISOString()
     .slice(0, 10);
   return d < today && d >= earliest;
+}
+
+/**
+ * Last day of play per match, as the snapshot store recorded it.
+ *
+ * Only a date that has already passed is useful here, and only to rule a match out;
+ * a match with no end date recorded falls back to the five-day window as before.
+ */
+function matchEndDates(store) {
+  const ends = new Map();
+  for (const row of Object.values(store?.rows ?? {})) {
+    if (row?.matchId && row?.endDate) ends.set(row.matchId, row.endDate);
+  }
+  return ends;
 }
 
 /**
@@ -259,6 +290,11 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
   const quarantined = [];
   const cricsheetRows = [];
 
+  // The snapshot store, loaded once: it supplies the day each Test innings ended on
+  // further down, and the match end dates that settle whether one is still in play.
+  const dayStore = loadStore();
+  const matchEnds = matchEndDates(dayStore);
+
   const crexRows = [];
   if (existsSync(CREX_PERF_PATH)) {
     const raw = JSON.parse(readFileSync(CREX_PERF_PATH, 'utf8')).byPlayer ?? {};
@@ -294,7 +330,7 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
         crexRows.push({
           ...r,
           playerId: mergedInto.get(named) ?? named,
-          provisional: unfinishedTest(r, today) || undefined,
+          provisional: unfinishedTest(r, today, matchEnds) || undefined,
         });
       }
     }
@@ -312,7 +348,7 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
   // Only its date changes, and only when this project watched the match itself.
   // An innings from a Test that finished before the store existed keeps the start
   // date, because nothing on CREX can place it any better.
-  const dayRows = expand(loadStore()).filter((r) => r.date >= from && !tooEarlyToShow(r, today));
+  const dayRows = expand(dayStore).filter((r) => r.date >= from && !tooEarlyToShow(r, today));
   const replaced = new Set();
   for (const r of dayRows) {
     // The collapsed row this innings came from, keyed as the scrape wrote it.
@@ -426,7 +462,12 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
   writeFileSync(`${OUT_DIR}/careers.json`, JSON.stringify(careers));
   writeFileSync(`${OUT_DIR}/days.json`, JSON.stringify(days));
   writeFileSync(`${OUT_DIR}/players.json`, JSON.stringify(playerList));
-  writeFileSync(`${OUT_DIR}/performances.json`, JSON.stringify(performances));
+  // The ranking score, computed here so the page sorts on a tested number rather
+  // than recomputing the model inline.
+  writeFileSync(
+    `${OUT_DIR}/performances.json`,
+    JSON.stringify(performances.map((p) => ({ ...p, impact: impact(p) })))
+  );
   writeFileSync(
     `${OUT_DIR}/meta.json`,
     JSON.stringify({

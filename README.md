@@ -455,6 +455,48 @@ innings corrected away. That is the trade, and it is the right way round: a tour
 vanishing from a player's history is both likelier and far harder to notice than a
 stale row surviving.
 
+## Ranking a performance
+
+"Performance of the day" used to be `runs + wickets * 25`, which was wrong in two ways
+that showed on the page. A wicket was worth 25 runs in every format, so 3 for 62 off
+twenty Test overs outranked a 76; and nothing but the raw counts mattered, so 125 off
+79 in an ODI sat below 5 for 80 off 18.2.
+
+`src/core/impact.js` scores a performance against what its own format expects — a par
+strike rate, a par economy, and what a wicket is worth — and sums the two disciplines,
+so an allrounder's 40 and 2 for 20 beats either half alone. The par figures are
+judgement calls and meant to be: getting them roughly right is what makes the order
+sensible, and no single number describes a match situation.
+
+Three things the arithmetic has to avoid, each found by a test rather than by reading:
+
+- **Tempo cannot decide an innings.** The strike-rate adjustment grows with every ball
+  faced, so uncapped it made a duck survived for thirty balls score *worse* than one
+  nicked off first ball — the longer the resistance, the bigger the penalty. It is
+  capped at half the runs, and occupation is credited separately, weighted by how
+  scarce it is in that format.
+- **Length is not quality.** Multiplying runs-saved over the overs bowled made bowling
+  more overs worth more by itself. Economy is judged as a rate and weighted by spell
+  length up to four overs, with a small cost per run conceded so two spells taking the
+  same wickets separate on more than rate alone.
+- **A missing number stays missing.** A figure with no balls bowled ranks on wickets
+  alone rather than assuming an economy, which is the rule the career stats follow.
+
+The score is ordinal and never shown. The page sorts on it and uses the same model to
+decide which discipline leads a row — those disagreed before, one using twenty runs a
+wicket and the other twenty-five, which is how a 4/28 ended up under a single off three
+balls.
+
+## Player of the match
+
+Named on the match page rather than its scorecard tab, in a `.player-of-match-card`
+block whose only `/player/` link is the winner — the same slug this project pins, so no
+name matching is needed. It costs one extra request per match, made alongside the
+scorecard read.
+
+No award is shown where none is named, which covers a match still being played, a
+washout, and most domestic fixtures. A missing award is not "nobody won it".
+
 ## Known limits
 
 - A live figure is only as good as what CREX displays mid-innings. The LIVE badge is
@@ -471,6 +513,9 @@ stale row surviving.
   found; both were caught by hand, and nothing in the build would stop a third.
 - An innings older than a week that CREX genuinely withdraws is kept rather than
   removed, since nothing distinguishes a withdrawal from a failed read.
+- The par figures behind the ranking are judgement calls, not measurements. They order
+  a day's cricket sensibly; they do not know a match situation, so a steady 30 that won
+  a low chase ranks below a flat 60 that did not.
 - A batting average is missing until every one of that player's innings has been read
   from a scorecard, so averages appear gradually as the backfill proceeds rather than
   all at once. Economy and bowling strike rate are computed from whichever innings have

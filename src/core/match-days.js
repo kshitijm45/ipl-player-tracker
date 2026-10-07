@@ -81,7 +81,7 @@ export function observe(store, { playerId, matchId, innings, day, date, batting,
  * ended. The match's start date travels alongside as `matchDate`, because that is
  * what CREX stamped the innings with and what the site showed before this existed.
  */
-export function expand(store) {
+export function expand(store, { today = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10) } = {}) {
   const out = [];
 
   // Whether a match is still being played is a fact about the match, so it is read
@@ -93,17 +93,31 @@ export function expand(store) {
   // same day — did not, because their rows were written on different runs with
   // different commentary state. Two players in one match cannot disagree about
   // whether that match has finished.
+  // `status` alone cannot answer this. It is written when the match page is read and
+  // never revisited, so a match observed while live keeps "Live" in the store for
+  // good: the Irani Cup final ended on 5 October and its innings still read TEST IN
+  // PROGRESS two days later. The end date CREX prints on the same page is the fact
+  // that settles it, and unlike the status it cannot go stale — a day that has passed
+  // stays passed.
   const liveMatch = new Set();
+  const ended = new Set();
   // The furthest day of play the store has seen for each match, which is how far the
   // match had got. An innings whose last day is behind that has closed.
   const latestDay = new Map();
   for (const row of Object.values(store.rows ?? {})) {
     if (!row.matchId) continue;
     if (row.status && row.status !== 'Finished') liveMatch.add(row.matchId);
+    // A match whose last day has gone by is over, whatever the stored status says.
+    // Collected rather than applied here: rows for one match arrive in no particular
+    // order, so a later row still marked "Live" would otherwise re-add a match an
+    // earlier one had already settled.
+    if (row.endDate && row.endDate < today) ended.add(row.matchId);
     for (const day of Object.keys(row.days ?? {}).map(Number)) {
       if (day >= 1) latestDay.set(row.matchId, Math.max(latestDay.get(row.matchId) ?? 0, day));
     }
   }
+
+  for (const id of ended) liveMatch.delete(id);
 
   for (const row of Object.values(store.rows ?? {})) {
     for (const d of dailyRows(row)) {

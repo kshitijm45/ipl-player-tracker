@@ -243,3 +243,42 @@ test('re-running changes nothing', () => {
   assert.equal(second.ballsAdded, 0, 'balls are not added twice');
   assert.deepEqual(byPlayer, after);
 });
+
+test('the player of the match is recorded on his innings', () => {
+  const byPlayer = { p1: [{ matchId: '11AJ', batting: { runs: 223, balls: 133, out: true } }] };
+  const r = enrich(byPlayer, card, { slugs, potm: 'shubman-gill-O5' });
+  assert.equal(r.awards, 1);
+  assert.equal(byPlayer.p1[0].playerOfMatch, true);
+});
+
+test('nobody else gets the award', () => {
+  const byPlayer = { p2: [{ matchId: '11AJ', bowling: { wickets: 4, runs: 48 } }] };
+  enrich(byPlayer, card, { slugs, potm: 'shubman-gill-O5' });
+  assert.equal(byPlayer.p2[0].playerOfMatch, undefined);
+});
+
+test('a match with no award named leaves every innings unmarked', () => {
+  // Routine: a match still being played, a washout, most domestic fixtures.
+  const byPlayer = { p1: [{ matchId: '11AJ', batting: { runs: 223, balls: 133, out: true } }] };
+  const r = enrich(byPlayer, card, { slugs, potm: null });
+  assert.equal(r.awards, 0);
+  assert.equal(byPlayer.p1[0].playerOfMatch, undefined);
+});
+
+test('both innings of a Test carry the award', () => {
+  // Either is the one a reader opens, so the match-level fact is stamped on both.
+  const byPlayer = {
+    p1: [
+      { matchId: '11AJ', innings: 1, batting: { runs: 223, balls: 133, out: true } },
+      { matchId: '11AJ', innings: 3, batting: { runs: 10, balls: 8, out: true } },
+    ],
+  };
+  enrich(byPlayer, card, { slugs, potm: 'shubman-gill-O5' });
+  assert.ok(byPlayer.p1.every((r) => r.playerOfMatch));
+});
+
+test('re-running does not double-count an award', () => {
+  const byPlayer = { p1: [{ matchId: '11AJ', batting: { runs: 223, balls: 133, out: true } }] };
+  enrich(byPlayer, card, { slugs, potm: 'shubman-gill-O5' });
+  assert.equal(enrich(byPlayer, card, { slugs, potm: 'shubman-gill-O5' }).awards, 0);
+});
