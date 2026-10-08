@@ -612,7 +612,27 @@ export function seriesEndedBefore(series, cutoff) {
   const mi = MON.indexOf(m[1]);
   if (mi < 0) return false;
 
-  const year = String(series.name ?? '').match(/(20\d{2})/)?.[1];
+  const label = String(series.name ?? '');
+
+  // A split season carries both its years ("Sheffield Shield 2026-27"), and its
+  // closing months belong to the *later* one. Taking the first year made the Shield
+  // end in March 2026 — four months before it started — so it read as long finished
+  // and every innings in it was skipped. Matt Short's 31 off 35 on 7 October was
+  // simply absent, and so was the whole of the Shield and the AUS One Day Cup, for
+  // every player in them.
+  //
+  // Which half a month falls in is the same rule `seasonYearFor` applies to a row's
+  // date: October to December in the opening year, January to September in the
+  // closing one.
+  const split = label.match(/(20\d{2})\s*[-/]\s*(\d{2,4})/);
+  let year;
+  if (split) {
+    const first = +split[1];
+    const second = split[2].length === 2 ? Math.floor(first / 100) * 100 + +split[2] : +split[2];
+    year = mi + 1 >= 10 ? first : second;
+  } else {
+    year = label.match(/(20\d{2})/)?.[1];
+  }
   if (!year) return false;
 
   const end = `${year}-${String(mi + 1).padStart(2, '0')}-${String(+m[2]).padStart(2, '0')}`;

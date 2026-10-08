@@ -104,3 +104,49 @@ test('a re-dated row with no scraped match is left alone', () => {
   assert.equal(row.batting.outFrom, undefined);
   assert.equal(row.date, '2026-09-01');
 });
+
+/* ── a day of play that has not finished ──
+   Multi-day rows are exempt from the blanket "nothing from today" rule, because the
+   match page's `Day N` label proves the day was reached — a day of Test cricket in
+   Australia finishes long before the next IST midnight, and withholding it would show
+   an empty page for a match three days old.
+
+   Reached is not finished, though, and the exemption read it as if it were: a figure
+   snapshotted mid-session was published the same day, so Jack Edwards led 8 October
+   with 0/20 off a spell still being bowled. */
+
+function tooEarly(row, today) {
+  const d = String(row?.date ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  if (row?.multiDay) {
+    if (d === today && row.provisional) return true;
+    return d > today;
+  }
+  return d >= today;
+}
+
+test("today's play is withheld while it is still unsettled", () => {
+  assert.equal(tooEarly({ date: '2026-10-08', multiDay: true, provisional: true }, '2026-10-08'), true);
+});
+
+test("today's play is shown once it has settled", () => {
+  // A day that finished early enough for the scrape to see it close.
+  assert.equal(tooEarly({ date: '2026-10-08', multiDay: true }, '2026-10-08'), false);
+});
+
+test('a day already behind us is shown whatever its flag says', () => {
+  // The case the exemption exists for: the match is still running, but this day of
+  // it is over and its figures are final.
+  assert.equal(tooEarly({ date: '2026-10-07', multiDay: true, provisional: true }, '2026-10-08'), false);
+});
+
+test('a future day is never shown', () => {
+  assert.equal(tooEarly({ date: '2026-10-09', multiDay: true }, '2026-10-08'), true);
+});
+
+test('limited-overs still waits a full day', () => {
+  // Unchanged: CREX gives no signal that a limited-overs innings has ended, so
+  // nothing from today is trusted at all.
+  assert.equal(tooEarly({ date: '2026-10-08' }, '2026-10-08'), true);
+  assert.equal(tooEarly({ date: '2026-10-07' }, '2026-10-08'), false);
+});

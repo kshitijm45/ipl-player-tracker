@@ -151,7 +151,20 @@ function istToday() {
 function tooEarlyToShow(row, today) {
   const d = String(row?.date ?? '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
-  if (row?.multiDay) return d > today;
+  if (row?.multiDay) {
+    // A stored row is exempt from the blanket "nothing from today" rule because the
+    // match page's `Day N` label proves the day was reached. Reached is not finished,
+    // though, and the exemption was reading it as if it were: a figure snapshotted
+    // mid-session on day one was published the same day, so Jack Edwards led a day
+    // with 0/20 off a spell that was still being bowled.
+    //
+    // Today's play is therefore withheld while it is still marked provisional, which
+    // is exactly the signal that it has not settled. A day already behind us is shown
+    // whatever its flag says — that is the case the exemption exists for, since a day
+    // of Test cricket in Australia finishes long before the next IST midnight.
+    if (d === today && row.provisional) return true;
+    return d > today;
+  }
   return d >= today;
 }
 
@@ -293,13 +306,15 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
   // The snapshot store, loaded once: it supplies the day each Test innings ended on
   // further down, and the match end dates that settle whether one is still in play.
   const dayStore = loadStore();
+  // Slug -> the name its owner's record is keyed under. Filled when the scraped rows
+  // are read and used again for the store's rows, which need the same rewrite.
+  const slugOwner = new Map();
   const matchEnds = matchEndDates(dayStore);
 
   const crexRows = [];
   if (existsSync(CREX_PERF_PATH)) {
     const raw = JSON.parse(readFileSync(CREX_PERF_PATH, 'utf8')).byPlayer ?? {};
     // Rows for slug-pinned players arrive keyed by slug rather than by id.
-    const slugOwner = new Map();
     for (const [name, pin] of Object.entries(crexSlugPins)) slugOwner.set(pin.slug, name);
 
     for (const [playerId, rows] of Object.entries(raw)) {
@@ -348,7 +363,22 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
   // Only its date changes, and only when this project watched the match itself.
   // An innings from a Test that finished before the store existed keeps the start
   // date, because nothing on CREX can place it any better.
-  const dayRows = expand(dayStore).filter((r) => r.date >= from && !tooEarlyToShow(r, today));
+  // Rows out of the snapshot store need the same slug-to-id rewrite the scraped rows
+  // get. A slug-pinned player has no register id, so his innings are stored under his
+  // slug while his record is keyed "unmapped:<name>" — and the two only join if the
+  // key is rewritten. Without it the row survives, loses its player, and the page
+  // renders a nameless card: Jack Edwards led 8 October as "— · AUS vs SA 2026".
+  //
+  // It was only ever applied on the scraped path, which hid it until a slug-pinned
+  // player had a multi-day innings, since every Test innings goes through the store.
+  const dayRows = expand(dayStore)
+    .filter((r) => r.date >= from && !tooEarlyToShow(r, today))
+    .map((r) => {
+      const owner = slugOwner.get(r.playerId);
+      const named = owner ? `unmapped:${owner}` : r.playerId;
+      const id = mergedInto.get(named) ?? named;
+      return id === r.playerId ? r : { ...r, playerId: id };
+    });
   const replaced = new Set();
   for (const r of dayRows) {
     // The collapsed row this innings came from, keyed as the scrape wrote it.

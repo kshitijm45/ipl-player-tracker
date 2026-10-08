@@ -1862,10 +1862,18 @@ function bigRow(r, p) {
   // performance in the first place. It used a hardcoded twenty runs a wicket, so the
   // headline could lead on batting while the row beneath it led on bowling for the
   // very same innings.
-  const lead = b && b.balls && impactOf(r, 'batting') >= impactOf(r, 'bowling')
+  // A spell counts as bowled if any of its numbers are present, including a
+  // wicketless one — the same rule `figure()` follows. Testing `w.wickets` meant a
+  // 0/20 was not bowling at all, so a bowler who had not batted led the day with
+  // "— did not bat": true of his batting, and the only thing he did that day was
+  // bowl.
+  const bowled = w && (w.wickets || w.runs != null || w.balls || w.overs);
+  const batted = b && b.balls;
+  const overs = w?.overs ?? (w?.balls ? (w.balls / 6).toFixed(1) : null);
+  const lead = batted && (!bowled || impactOf(r, 'batting') >= impactOf(r, 'bowling'))
     ? { v: `${b.runs}${b.out ? '' : '*'}`, l: `off ${b.balls} balls` }
-    : w && w.wickets
-      ? { v: `${w.wickets}/${w.runs}`, l: w.overs ? `in ${w.overs} overs` : 'wickets' }
+    : bowled
+      ? { v: `${w.wickets ?? 0}/${w.runs ?? 0}`, l: overs ? `in ${overs} overs` : 'wickets' }
       : { v: b ? `${b.runs}` : '—', l: b ? `off ${b.balls}` : 'did not bat' };
 
   // The day a Test innings belongs to, and whether it is still being added to.
