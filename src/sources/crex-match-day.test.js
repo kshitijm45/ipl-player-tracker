@@ -483,3 +483,89 @@ test('a finished match is never badged, even from stale snapshots', async () => 
 
   for (const r of expand(store)) assert.equal(r.provisional, undefined);
 });
+
+/* ── a day still being played ──
+   The figure used to come from the newest snapshot whatever its state, so a reading
+   taken mid-session won: a batsman 80* at stumps on day one showed as the 120* he
+   happened to be on when the scrape ran during day two, and day one's settled 80* was
+   never published at all.
+
+   An innings now sits on the last day whose play has finished, carrying that day's
+   figure, and moves forward a day at a time as the match goes on. */
+
+test('a running score does not replace the settled day behind it', () => {
+  const row = {
+    days: {
+      1: { date: '2026-10-07', batting: { runs: 80, out: false, balls: 150 } },
+      2: { date: '2026-10-08', batting: { runs: 120, out: false, balls: 210 }, provisional: true },
+    },
+  };
+  const r = dailyRows(row)[0];
+  assert.equal(r.day, 1, 'placed on the day that finished');
+  assert.equal(r.date, '2026-10-07');
+  assert.equal(r.batting.runs, 80, "day one's figure, not the running one");
+  assert.ok(!r.provisional, 'a finished day is not provisional');
+});
+
+test('the innings moves forward as each day closes', () => {
+  // Day two has now settled at 140 and day three is in progress. The innings leaves
+  // day one and appears on day two — once, on the most recent day it can be stated.
+  const row = {
+    days: {
+      1: { date: '2026-10-07', batting: { runs: 80, out: false, balls: 150 } },
+      2: { date: '2026-10-08', batting: { runs: 140, out: false, balls: 240 } },
+      3: { date: '2026-10-09', batting: { runs: 160, out: false, balls: 280 }, provisional: true },
+    },
+  };
+  const r = dailyRows(row)[0];
+  assert.equal(r.day, 2);
+  assert.equal(r.batting.runs, 140);
+});
+
+test('a bowling figure follows the same rule', () => {
+  const row = {
+    days: {
+      1: { date: '2026-10-07', bowling: { wickets: 2, runs: 40 } },
+      2: { date: '2026-10-08', bowling: { wickets: 3, runs: 55 }, provisional: true },
+    },
+  };
+  const r = dailyRows(row)[0];
+  assert.equal(r.day, 1);
+  assert.deepEqual(r.bowling, { wickets: 2, runs: 40 });
+});
+
+test('a first day still in progress is still reported, and badged', () => {
+  // Nothing has settled yet, so there is no completed day to fall back to. The
+  // running figure is shown and marked, which is what `provisional` is for.
+  const row = {
+    days: { 1: { date: '2026-10-08', batting: { runs: 40, out: false, balls: 60 }, provisional: true } },
+  };
+  const r = dailyRows(row)[0];
+  assert.equal(r.day, 1);
+  assert.equal(r.batting.runs, 40);
+  assert.ok(r.provisional);
+});
+
+test('a correction is taken even from a day in progress', () => {
+  // A correction does not advance the innings — the figure goes down, or changes after
+  // the batsman was out — so it is a re-reading rather than a running score.
+  const row = {
+    days: {
+      2: { date: '2026-10-02', batting: { runs: 32, out: true, balls: 54 } },
+      3: { date: '2026-10-03', batting: { runs: 2, out: true, balls: 13 }, provisional: true },
+    },
+  };
+  const r = dailyRows(row)[0];
+  assert.equal(r.day, 2, 'and it does not move the innings');
+  assert.equal(r.batting.runs, 2, 'the corrected figure wins');
+});
+
+test('spanned covers only the days the innings is placed across', () => {
+  const row = {
+    days: {
+      1: { date: '2026-10-07', batting: { runs: 80, out: false, balls: 150 } },
+      2: { date: '2026-10-08', batting: { runs: 120, out: false, balls: 210 }, provisional: true },
+    },
+  };
+  assert.deepEqual(dailyRows(row)[0].spanned, [1]);
+});

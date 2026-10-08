@@ -244,6 +244,29 @@ export function recordSnapshot(row, { day, date, batting, bowling, provisional }
  * innings by its own conclusion spreads a Test across the days it was actually
  * played, which is what a daily tracker is for.
  */
+/**
+ * Is `next` a re-reading of the same innings rather than more of it?
+ *
+ * A correction never advances the innings: the runs or balls go down, or they change
+ * at all after the batsman was already out. Growth is play, and a growing figure read
+ * mid-session is a running score that has no business being published as a day's work.
+ */
+function isCorrectionOf(placed, next) {
+  if (!placed || !next) return false;
+  const pb = placed.batting;
+  const nb = next.batting;
+  if (pb && nb) {
+    if (pb.out && (nb.runs !== pb.runs || nb.balls !== pb.balls)) return true;
+    if ((nb.runs ?? 0) < (pb.runs ?? 0) || (nb.balls ?? 0) < (pb.balls ?? 0)) return true;
+  }
+  const pw = placed.bowling;
+  const nw = next.bowling;
+  if (pw && nw) {
+    if ((nw.wickets ?? 0) < (pw.wickets ?? 0) || (nw.runs ?? 0) < (pw.runs ?? 0)) return true;
+  }
+  return false;
+}
+
 export function dailyRows(row) {
   const days = Object.keys(row?.days ?? {})
     .map(Number)
@@ -258,18 +281,49 @@ export function dailyRows(row) {
   // stops moving has stopped for good. A batsman dismissed on day 2 and one left 112*
   // when the innings was declared both last changed on day 2, and both belong there —
   // the dismissal adds nothing the comparison does not already know.
-  const endDay = lastDayThatMoved(row, days);
+  // Days whose play had finished when they were read. An innings is only ever placed
+  // on one of these, because a day still in progress has no figure to state.
+  const settledDays = days.filter((d) => !row.days[d]?.provisional);
+  // While the current day is still being played, the innings belongs to the last day
+  // that finished — and moves forward as each day closes, so it is published once, on
+  // the most recent day it can be stated completely.
+  const placeable = settledDays.length ? settledDays : days;
+
+  const endDay = lastDayThatMoved(row, placeable);
 
   const snap = row.days[endDay];
   if (!snap) return [];
 
-  // The figure comes from the most recent reading, which is not always the day the
-  // innings ended on. A later run can correct an earlier day's snapshot — Manav
-  // Suthar's first Irani Cup innings was recorded as a buggy "32 (54)" and later read
-  // correctly as "2 (13)" — and the newest reading is the one to trust. The *day*
-  // still comes from when play actually stopped, so a correction fixes the figure
-  // without moving the innings.
-  const latest = row.days[days[days.length - 1]] ?? snap;
+  // The figure comes from the most recent *settled* reading.
+  //
+  // A later run can correct an earlier day's snapshot — Manav Suthar's first Irani Cup
+  // innings was recorded as a buggy "32 (54)" and later read correctly as "2 (13)" —
+  // so the newest reading is normally the one to trust, and the day still comes from
+  // when play actually stopped, letting a correction fix the figure without moving the
+  // innings.
+  //
+  // A reading taken mid-session is the exception: it is a batsman's running score, not
+  // a day's play. Preferring it published a figure that was still moving and, worse,
+  // buried the completed day behind it — a batsman 80* at stumps on day one showed as
+  // the 120* he happened to be on when the scrape ran during day two, and day one's
+  // settled 80* was never published at all.
+  //
+  // So an unsettled snapshot is passed over in favour of the last settled one. The
+  // innings then appears on the last day whose play is finished, with that day's
+  // figure, and moves forward a day at a time as the match goes on — present once,
+  // on the most recent day it can be stated completely.
+  // Normally the figure is the one read on the day the innings is placed. But a later
+  // run can correct an earlier day's snapshot — Manav Suthar's first Irani Cup innings
+  // was stored as a buggy "32 (54)" and later read correctly as "2 (13)" — and that
+  // correction is worth taking even though it arrived on a day still in progress.
+  //
+  // A correction is distinguishable from a running score: it does not advance the
+  // innings. A figure that has gone *down*, or changed while the batsman was already
+  // out, is a re-reading of the same innings; one that has grown is more of it, and
+  // mid-session growth is exactly what must not be published.
+  const newest = row.days[days[days.length - 1]];
+  const placed = row.days[placeable[placeable.length - 1]] ?? snap;
+  const latest = newest && isCorrectionOf(placed, newest) ? newest : placed;
   const figures = {
     batting: latest.batting ?? snap.batting ?? null,
     bowling: latest.bowling ?? snap.bowling ?? null,
@@ -283,7 +337,7 @@ export function dailyRows(row) {
   // observed without the figure moving is itself the evidence that it has settled —
   // including for a batsman left not out, whose innings ended by a declaration or by
   // the match finishing rather than by a dismissal.
-  const settled = endDay < days[days.length - 1] || !snap.provisional;
+  const settled = endDay < placeable[placeable.length - 1] || !snap.provisional;
 
   return [{
     day: endDay,
@@ -292,7 +346,7 @@ export function dailyRows(row) {
     bowling: figures.bowling,
     // Which days the innings actually spanned, so the page can say "over days 2-3"
     // rather than implying it all happened at once.
-    spanned: days.filter((d) => d <= endDay),
+    spanned: placeable.filter((d) => d <= endDay),
     // An innings still being played: the figure is the running one, not a result.
     provisional: settled ? undefined : (snap.provisional || undefined),
     multiDay: true,
