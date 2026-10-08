@@ -194,9 +194,27 @@ async function readSquad(page, fixture, pinned, maxAgeMs) {
   const slugs = cached ?? (await fetchSquad(page, fixture.url));
   if (!cached) writeCache(`fixture_squad_${fixture.id}`, slugs);
 
+  // A player who appears under both sides was never placed: the toggle did not swap,
+  // and the same XI was read twice. Keeping him would put the same name in both
+  // line-ups, which no fixture ever has, so he is left unplaced instead — the page
+  // then names him without claiming a side rather than claiming both.
+  const seen = new Map();
+  for (const { slug, side } of slugs) {
+    if (!seen.has(slug)) seen.set(slug, new Set());
+    seen.get(slug).add(side);
+  }
+  const onBothSides = new Set([...seen].filter(([, s]) => s.size > 1).map(([slug]) => slug));
+
   const out = [];
+  const placed = new Set();
   for (const { slug, side, label } of slugs) {
     if (!pinned.has(slug)) continue;
+    if (onBothSides.has(slug)) {
+      if (placed.has(slug)) continue;
+      placed.add(slug);
+      out.push({ slug, playerId: pinned.get(slug), side: null, code: null });
+      continue;
+    }
 
     // The toggle's own label ("IND", "WI") is matched against the side codes taken
     // from the match URL, so a player is placed by CREX's agreement with itself
@@ -253,11 +271,23 @@ async function fetchSquad(page, url) {
     // Wait for the panel to actually swap before reading it, for the same reason the
     // player-page card walk does: a click that has not landed yet would hand back the
     // previous team's names under this team's label.
+    let swapped = i === 0;
     for (let attempt = 0; attempt < 4; attempt++) {
       const now = await rowSlugs(page);
-      if (i === 0 || now.join('|') !== before) break;
+      if (i === 0 || now.join('|') !== before) { swapped = true; break; }
       await page.waitForTimeout(900);
     }
+
+    // A panel that never changed is the first team's XI still on screen, not the
+    // second's. Recording it anyway is how Josh Inglis, Mitchell Marsh, Cameron Green
+    // and Cooper Connolly came to be listed as Queensland players as well as Western
+    // Australian ones, and how all sixteen of India A's squad appeared under
+    // Australia A — the same names under both sides, which is never a real line-up.
+    //
+    // Waiting longer would not help: the swap either happened or the page has one
+    // squad to give. So the second read is dropped, leaving the fixture with the one
+    // XI that was genuinely observed.
+    if (!swapped) continue;
 
     for (const slug of await rowSlugs(page)) out.push({ slug, side: i, label });
   }
@@ -288,7 +318,11 @@ export function parseMatchLink(href) {
   if (!m) return null;
   const [, body, id] = m;
 
-  const vs = body.match(/^([a-z0-9]+)-vs-([a-z0-9]+)-(.*)$/i);
+  // A-team and similar suffixed codes carry a hyphen of their own ("aus-a-vs-ind-a"),
+  // so the side tokens cannot be plain alphanumerics. Without this the whole match
+  // yielded no codes at all, and with no codes a squad cannot be placed — every
+  // player read for India A v Australia A was listed under both sides.
+  const vs = body.match(/^([a-z0-9]+(?:-[ab])?)-vs-([a-z0-9]+(?:-[ab])?)-(.*)$/i);
   if (!vs) return { id, codes: [], stage: null };
 
   return {
@@ -336,13 +370,35 @@ function abbreviates(code, name) {
   const c = String(code ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const n = String(name ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
   if (!c || !n) return false;
-  let i = 0;
-  for (const ch of c) {
-    i = n.indexOf(ch, i);
-    if (i === -1) return false;
-    i++;
-  }
-  return true;
+
+  // In order, letter by letter: "qld" is in "queensland", "ind" in "india".
+  const subsequence = (() => {
+    let i = 0;
+    for (const ch of c) {
+      i = n.indexOf(ch, i);
+      if (i === -1) return false;
+      i++;
+    }
+    return true;
+  })();
+  if (subsequence) return true;
+
+  // Some codes name the association rather than the side: Western Australia plays as
+  // "WACA", whose C and A come from "Cricket Association" and appear nowhere in the
+  // team name. The subsequence test fails on those, both codes come back null, and a
+  // squad that cannot be placed is attributed to both sides — Josh Inglis and three
+  // other Western Australians were listed as Queensland players.
+  //
+  // Falling back to the initials of the name's words catches it: "western australia"
+  // gives "wa", which starts "waca". This is deliberately only a fallback, since two
+  // letters match loosely and the ordered test is the one that should decide.
+  const initials = String(name ?? '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join('');
+  return initials.length >= 2 && c.startsWith(initials);
 }
 
 /**

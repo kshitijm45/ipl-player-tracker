@@ -1711,9 +1711,14 @@ function comingUp() {
             const who = (f.players ?? [])
               .map((x) => ({ p: P.find((y) => y.id === x.playerId), side: x.side }))
               .filter((x) => x.p);
+            // A player CREX named but did not place — the squad toggle gave one XI
+            // for both sides, so which side he is on was never established. He is
+            // still worth naming; claiming a side would be the guess.
+            const unplaced = who.filter((x) => !x.side);
             const sides = [f.teamA, f.teamB]
               .map((team) => ({ team, list: who.filter((x) => x.side === team) }))
-              .filter((g) => g.list.length);
+              .filter((g) => g.list.length)
+              .concat(unplaced.length ? [{ team: 'Side not announced', list: unplaced }] : []);
             return `<div class="fx">
               <span class="fx-time mono">${esc(f.time ?? '')}</span>
               <span class="fx-teams">
