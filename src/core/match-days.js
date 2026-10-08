@@ -127,6 +127,7 @@ export function expand(store, { today = new Date(Date.now() + 5.5 * 3600e3).toIS
         inningsNo: row.innings,
         fixture: row.fixture ?? null,
         competition: row.competition ?? null,
+        matchUrl: row.matchUrl ?? null,
         format: row.format ?? 'Test',
         team: row.team ?? null,
         opponent: row.opponent ?? null,

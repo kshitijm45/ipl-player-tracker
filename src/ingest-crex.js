@@ -611,6 +611,12 @@ async function recordMatchDays(source, byPlayer) {
         meta: {
           fixture: r.fixture ?? null,
           competition: r.competition ?? null,
+          // The match's own URL, which names the competition CREX filed it under.
+          // The build uses it to drop a row whose series cannot be the one it was
+          // labelled with, and that check is worth most here: a multi-day fixture
+          // names no opponent, so nothing else in the row can contradict a wrong
+          // label.
+          matchUrl: r.matchUrl ?? null,
           format: r.format ?? 'Test',
           team: r.team ?? null,
           opponent: r.opponent ?? null,

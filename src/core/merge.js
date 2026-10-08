@@ -104,8 +104,34 @@ export function mergePerformances({ crexRows = [], cricsheetRows = [], today, fr
     return !codes.some((c) => c.toUpperCase() === opponent.toUpperCase());
   };
 
+  // The same check, for a fixture that names no opponent.
+  //
+  // `contradicts` can only speak when the fixture carries a "vs XX" clause, and a
+  // multi-day one does not — "2nd Test, 1st Inn" names nobody. That is exactly where
+  // the mislabel lands, because the window guess has least to go on: Jack Edwards's
+  // Sheffield Shield innings for New South Wales was filed under "AUS vs SA 2026",
+  // whose card happened to span the date, and the page showed a domestic match as an
+  // international one.
+  //
+  // The match URL settles it. CREX builds it from the sides and the competition
+  // ("nsw-vs-tas-2nd-match-sheffield-shield-2026-27"), so a bilateral series whose
+  // own two codes appear nowhere in the fixture's URL is not the series this match
+  // belongs to. Only bilateral labels are checked, since they are the only ones that
+  // name their sides; a tournament ("CSA T20 2026") says nothing about who played and
+  // cannot be contradicted this way.
+  const urlContradicts = (r) => {
+    const m = String(r.competition ?? '').match(/^([A-Z]{2,4}(?:-[AB])?)\s+vs\s+([A-Z]{2,4}(?:-[AB])?)/);
+    if (!m) return false;
+    const slug = String(r.matchUrl ?? '').match(/\/cricket-live-score\/(.+?)-match-updates-/)?.[1];
+    if (!slug) return false;
+    const sides = slug.split('-match-')[0].split('-vs-').map((x) => x.toLowerCase());
+    if (sides.length < 2) return false;
+    const codes = [m[1], m[2]].map((c) => c.toLowerCase());
+    return !codes.some((c) => sides.some((s) => s === c || s.startsWith(c)));
+  };
+
   const rows = [...merged.values()]
-    .filter((r) => !contradicts(r))
+    .filter((r) => !contradicts(r) && !urlContradicts(r))
     .filter((r) => !from || !r.date || r.date >= from);
   return rows.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
 }

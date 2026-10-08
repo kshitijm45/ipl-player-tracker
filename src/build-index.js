@@ -414,6 +414,10 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
       r.bowling = { ...r.bowling, balls: src.bowling.balls };
     }
     if (src.playerOfMatch) r.playerOfMatch = true;
+    // The match URL too, which the store only began recording later. It is what lets
+    // the merge drop a row filed under a series it cannot belong to, and without it
+    // every innings stored before that change is unverifiable.
+    if (!r.matchUrl && src.matchUrl) r.matchUrl = src.matchUrl;
   }
 
   const performances = mergePerformances({

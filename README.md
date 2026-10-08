@@ -497,6 +497,29 @@ scorecard read.
 No award is shown where none is named, which covers a match still being played, a
 washout, and most domestic fixtures. A missing award is not "nobody won it".
 
+## A row filed under the wrong series
+
+A row's tournament comes from the series card its table was read under, and where two
+cards overlap in time the window guess can pick the wrong one. Jack Edwards's Sheffield
+Shield innings for New South Wales was filed under "AUS vs SA 2026" — whose card spans
+Sep 24 to Oct 31 and so contains the date — and the page showed a domestic match as an
+international one.
+
+`merge.js` already dropped a row whose fixture names an opponent its competition never
+mentions, but that guard reads the opponent out of the fixture and a multi-day fixture
+names none: "2nd Test, 1st Inn" contradicts nothing. Which is exactly where the
+mislabel lands, because the window guess has least to go on.
+
+The match URL settles it. CREX builds it from the sides and the competition
+(`nsw-vs-tas-2nd-match-sheffield-shield-2026-27`), so a **bilateral** series whose own
+two codes appear nowhere in the URL is not this match's series. Only bilateral labels
+are checked — a tournament name says nothing about who played, so it cannot be
+contradicted this way, and `CSA T20 2026` on a `lio-vs-nwd` URL is perfectly correct.
+
+Two rows in the current data fail it: the Sheffield Shield innings above, and a Delhi
+Premier League match filed under "IND vs SL 2026". Every genuine bilateral Test series
+survives.
+
 ## Known limits
 
 - A live figure is only as good as what CREX displays mid-innings. The LIVE badge is
