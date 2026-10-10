@@ -520,6 +520,25 @@ Two rows in the current data fail it: the Sheffield Shield innings above, and a 
 Premier League match filed under "IND vs SL 2026". Every genuine bilateral Test series
 survives.
 
+## Matches in progress
+
+A Test is the match most worth knowing is on, and the one the fixture list cannot
+show. CREX's `/schedule` carries only upcoming limited-overs cards — twenty on a
+typical day, not one of them multi-day — so a five-day match is absent for its whole
+duration. It is not being filtered out; it is never listed.
+
+The snapshot store already has it, because the scrape reads each live match's page to
+date its innings. `inProgressMatches` groups those rows by match and the page shows
+them above Coming up, with the tracked players in each and what they have done so far.
+
+**A match leaves the section when it is reported finished, not when its five days are
+up.** A Test can finish inside three, and a Sheffield Shield match in the data finished
+four days into its window — anything keyed on the calendar would leave a decided match
+on the page as though it were still being played. `status` is refreshed on every run
+for any match not already Finished, so the section empties as each one ends. The end
+date is still checked, but only as a backstop against a store that missed a refresh:
+a match whose last day has passed cannot be in progress whatever its status says.
+
 ## Known limits
 
 - A live figure is only as good as what CREX displays mid-innings. The LIVE badge is

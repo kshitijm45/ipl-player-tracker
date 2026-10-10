@@ -1005,6 +1005,9 @@
     margin-bottom: 8px;
   }
   .fx-time { font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+  /* A venue is not a kick-off time and can be long enough to push the page sideways
+     ("Western Australia Cricket Association Ground, Perth"), so it wraps. */
+  .fx-venue { white-space: normal; }
   .fx-teams { font-size: 14.5px; min-width: 0; }
   .fx-teams b { font-weight: 600; }
   .fx-comp { font-size: 12.5px; color: var(--ink-3); text-align: right; }
@@ -1177,11 +1180,11 @@
 <script>
 // Replaced with the built index by src/bundle-site.js, which writes offseason-live.html.
 // The empty stub keeps this source file openable on its own without throwing.
-window.__DATA__ = { players: [], perfs: [], days: [], meta: {}, fixtures: [], careers: {} };
+window.__DATA__ = { players: [], perfs: [], days: [], meta: {}, fixtures: [], careers: {}, inProgress: [] };
 
 const IPL = 'Indian Premier League';
 const S = { view: 'today', club: '', player: null, fmt: '', q: '', day: null, cursor: -1 };
-let P = [], F = [], D = [], M = {}, FX = [], CAR = {}, byP = new Map(), byD = new Map();
+let P = [], F = [], D = [], M = {}, FX = [], CAR = {}, IP = [], byP = new Map(), byD = new Map();
 
 const $ = (i) => document.getElementById(i);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -1387,6 +1390,7 @@ function boot() {
   const d = window.__DATA__;
   P = d.players; F = d.perfs; D = d.days; M = d.meta; FX = d.fixtures ?? [];
   CAR = d.careers ?? {};
+  IP = d.inProgress ?? [];
   for (const r of F) {
     if (!byP.has(r.playerId)) byP.set(r.playerId, []);
     byP.get(r.playerId).push(r);
@@ -1699,7 +1703,7 @@ function comingUp() {
     byDay.get(f.date).push(f);
   }
 
-  return `<div class="gap"></div>
+  return `${inProgressBlock()}<div class="gap"></div>
     <div class="sect"><h2>Coming up</h2><p>Next two days, with the tracked players named in each squad · times IST</p></div>
     <div class="fixtures">
       ${[...byDay.entries()].map(([d, list]) => `
@@ -1734,6 +1738,61 @@ function comingUp() {
             </div>`;
           }).join('')}
         </div>`).join('')}
+    </div>`;
+}
+
+/**
+ * Multi-day matches being played right now.
+ *
+ * CREX's schedule carries only upcoming limited-overs cards, so a Test never appears
+ * in "Coming up" — not filtered out, simply never listed — and a five-day match was
+ * invisible for its whole duration. This comes from the snapshot store instead, which
+ * already reads each live match's page to date its innings.
+ *
+ * A match leaves this section when it is reported finished, not when its five days
+ * are up: a Test can finish inside three, and a Sheffield Shield match in the data
+ * finished four days into its window.
+ */
+function inProgressBlock() {
+  const live = IP.map((m) => ({
+    ...m,
+    // Scoped to the club rail like every other view, and to players we can name.
+    players: m.players.filter((pl) => inScope(pl) && P.some((x) => x.id === pl.playerId)),
+  })).filter((m) => m.players.length);
+  if (!live.length) return '';
+
+  const figure = (i) => {
+    const bits = [];
+    if (i.batting && (i.batting.balls || i.batting.runs)) {
+      bits.push(`${i.batting.runs}${i.batting.out ? '' : '*'} (${i.batting.balls})`);
+    }
+    if (i.bowling && (i.bowling.wickets || i.bowling.runs != null)) {
+      bits.push(`${i.bowling.wickets ?? 0}/${i.bowling.runs ?? 0}`);
+    }
+    return bits.join(' & ');
+  };
+
+  return `<div class="gap"></div>
+    <div class="sect"><h2>In progress</h2><p>Multi-day cricket being played now, which the fixture list does not carry</p></div>
+    <div class="fixtures">
+      ${live.map((m) => `<div class="fx-day">
+        <div class="fx-date">${esc(m.competition ?? 'Match')}${
+          m.day ? ` · Day ${m.day}` : ''}<span class="live-dot">LIVE</span></div>
+        <div class="fx">
+          <span class="fx-time fx-venue mono">${esc(m.venue ?? '')}</span>
+          <span class="fx-teams">
+            <span class="fx-who">
+              ${m.players.map((pl) => {
+                const p = P.find((x) => x.id === pl.playerId);
+                const fig = pl.innings.map(figure).filter(Boolean).join(', ');
+                return `<button class="fx-p" data-team="${esc(club1(p))}" data-id="${esc(p.id)}"
+                  title="${esc(p.name)}${pl.team ? ` — ${esc(pl.team)}` : ''}">${esc(p.name)}${
+                  fig ? ` <b>${esc(fig)}</b>` : ''}</button>`;
+              }).join('')}
+            </span>
+          </span>
+        </div>
+      </div>`).join('')}
     </div>`;
 }
 

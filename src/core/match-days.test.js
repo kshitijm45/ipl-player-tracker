@@ -94,3 +94,87 @@ test('two players in one match agree about whether it finished', () => {
   const flags = expand(store, { today: '2026-10-06' }).map((r) => Boolean(r.provisional));
   assert.equal(new Set(flags).size, 1, 'both innings say the same thing');
 });
+
+/* ── matches still being played ──
+   A Test is the match most worth knowing is on, and the one the fixtures scrape
+   cannot show: CREX's schedule carries only upcoming limited-overs cards, so a
+   five-day match is absent for its whole duration. The store already has what is
+   needed, because the scrape reads each live match's page to date its innings. */
+
+import { inProgressMatches } from './match-days.js';
+
+const liveRow = (over) => ({
+  playerId: 'p', matchId: 'M', innings: 1, format: 'Test',
+  competition: 'AUS vs SA 2026', team: 'AUS', venue: 'Kingsmead',
+  startDate: '2026-10-09', endDate: '2026-10-13', status: 'Live',
+  days: { 1: { date: '2026-10-09', batting: { runs: 33, out: false, balls: 72 }, provisional: true } },
+  ...over,
+});
+
+test('a match being played is reported', () => {
+  const m = inProgressMatches({ rows: { a: liveRow() } }, { asOf: '2026-10-10' });
+  assert.equal(m.length, 1);
+  assert.equal(m[0].matchId, 'M');
+  assert.equal(m[0].day, 1);
+  assert.equal(m[0].players.length, 1);
+});
+
+test('a finished match is dropped the moment it finishes', () => {
+  // Not after five days. A Test can finish inside three, and a Sheffield Shield
+  // match in the data finished four days into a five-day window — anything keyed on
+  // the calendar would leave a decided match on the page as though it were still on.
+  const m = inProgressMatches(
+    { rows: { a: liveRow({ status: 'Finished' }) } },
+    { asOf: '2026-10-10' }
+  );
+  assert.equal(m.length, 0);
+});
+
+test('a match whose last day has passed is dropped even if the status is stale', () => {
+  // `status` is written when the page is read; a store that missed a refresh would
+  // otherwise keep a long-decided match listed for ever.
+  const m = inProgressMatches({ rows: { a: liveRow() } }, { asOf: '2026-10-14' });
+  assert.equal(m.length, 0);
+});
+
+test('the last day of the window still counts as in progress', () => {
+  const m = inProgressMatches({ rows: { a: liveRow() } }, { asOf: '2026-10-13' });
+  assert.equal(m.length, 1);
+});
+
+test('a row with no status is not claimed to be live', () => {
+  const m = inProgressMatches(
+    { rows: { a: liveRow({ status: undefined }) } },
+    { asOf: '2026-10-10' }
+  );
+  assert.equal(m.length, 0);
+});
+
+test('every tracked player in one match is listed under it', () => {
+  const rows = {
+    a: liveRow({ playerId: 'p1' }),
+    b: liveRow({ playerId: 'p2', team: 'SA' }),
+  };
+  const [m] = inProgressMatches({ rows }, { asOf: '2026-10-10' });
+  assert.equal(m.players.length, 2);
+  assert.deepEqual(m.players.map((x) => x.playerId).sort(), ['p1', 'p2']);
+});
+
+test('the match day is the furthest any innings has reached', () => {
+  // Two players in one match cannot be on different days of it.
+  const rows = {
+    a: liveRow({ playerId: 'p1', days: { 1: { date: '2026-10-09', batting: { runs: 10, balls: 20 } } } }),
+    b: liveRow({ playerId: 'p2', days: { 2: { date: '2026-10-10', batting: { runs: 40, balls: 60 } } } }),
+  };
+  assert.equal(inProgressMatches({ rows }, { asOf: '2026-10-10' })[0].day, 2);
+});
+
+test("a player's latest figure is carried", () => {
+  const [m] = inProgressMatches({ rows: { a: liveRow() } }, { asOf: '2026-10-10' });
+  assert.deepEqual(m.players[0].innings[0].batting, { runs: 33, out: false, balls: 72 });
+});
+
+test('an empty store reports nothing', () => {
+  assert.deepEqual(inProgressMatches({ rows: {} }, { asOf: '2026-10-10' }), []);
+  assert.deepEqual(inProgressMatches(null, { asOf: '2026-10-10' }), []);
+});

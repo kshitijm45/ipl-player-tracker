@@ -164,3 +164,85 @@ export function liveMatchIds(store) {
   }
   return ids;
 }
+
+/**
+ * Multi-day matches still being played, with the tracked players in each.
+ *
+ * A Test is the match most worth knowing is on, and it is the one the fixtures scrape
+ * cannot show: `/schedule` carries only upcoming limited-overs cards, so a five-day
+ * match is absent for its whole duration — not filtered out, simply never listed.
+ * Everything needed is already here, because the scrape reads each live match's page
+ * to date its innings.
+ *
+ * Which matches count is decided by `status`, refreshed on the run that produced the
+ * store, and never by the calendar. A Test can finish inside three days — the Irani
+ * Cup ended on day five of a window that ran to the 5th, and a Sheffield Shield match
+ * finished four days into a five-day window — so anything derived from `endDate`
+ * would leave a decided match sitting on the page as though it were still on.
+ *
+ * `asOf` only guards against a store that has gone stale without being refreshed: a
+ * match whose last day has passed cannot still be in progress whatever its status
+ * says, which is the same reasoning `expand` applies to the badge.
+ */
+export function inProgressMatches(store, { asOf = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10) } = {}) {
+  const byMatch = new Map();
+
+  for (const row of Object.values(store?.rows ?? {})) {
+    if (!row?.matchId) continue;
+    // Only what the latest read said: a match recorded Finished is over, and one
+    // whose final day has gone by is over whether or not the store caught it.
+    if (row.status === 'Finished') continue;
+    if (row.endDate && row.endDate < asOf) continue;
+    if (!row.status) continue;
+
+    const m = byMatch.get(row.matchId) ?? {
+      matchId: row.matchId,
+      competition: row.competition ?? null,
+      format: row.format ?? 'Test',
+      venue: row.venue ?? null,
+      startDate: row.startDate ?? null,
+      endDate: row.endDate ?? null,
+      matchUrl: row.matchUrl ?? null,
+      day: null,
+      players: new Map(),
+    };
+    m.competition ??= row.competition ?? null;
+    m.venue ??= row.venue ?? null;
+    m.matchUrl ??= row.matchUrl ?? null;
+
+    // The furthest day any innings of this match has reached, which is the day the
+    // match is on. Read per match rather than per player, because two players in one
+    // match cannot be on different days of it.
+    for (const d of Object.keys(row.days ?? {}).map(Number)) {
+      if (d >= 1) m.day = Math.max(m.day ?? 0, d);
+    }
+
+    // One entry per player, with whatever he has done so far. A player named in the
+    // match but yet to bat or bowl still belongs here: that he is playing is the
+    // point.
+    const existing = m.players.get(row.playerId) ?? { playerId: row.playerId, team: row.team ?? null, innings: [] };
+    const latest = latestSnapshot(row);
+    if (latest) existing.innings.push({ innings: row.innings ?? 1, ...latest });
+    existing.team ??= row.team ?? null;
+    m.players.set(row.playerId, existing);
+
+    byMatch.set(row.matchId, m);
+  }
+
+  return [...byMatch.values()]
+    .map((m) => ({ ...m, players: [...m.players.values()] }))
+    .sort((a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? ''));
+}
+
+/** The most recent reading of one stored innings, whatever day it came from. */
+function latestSnapshot(row) {
+  const days = Object.keys(row?.days ?? {})
+    .map(Number)
+    .filter((n) => n >= 1)
+    .sort((a, b) => a - b);
+  if (!days.length) return null;
+  const s = row.days[days[days.length - 1]];
+  if (!s) return null;
+  if (!s.batting && !s.bowling) return null;
+  return { day: days[days.length - 1], batting: s.batting ?? null, bowling: s.bowling ?? null };
+}

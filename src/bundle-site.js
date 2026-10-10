@@ -34,6 +34,8 @@ export function bundle() {
   // Career aggregates, keyed by player id. Computed in build-index so the arithmetic
   // is tested rather than repeated in the page.
   const careers = read('careers.json', {});
+  // Multi-day matches being played right now, which the fixtures scrape cannot see.
+  const inProgress = read('in-progress.json', []);
 
   const payload = {
     players: players.players ?? players,
@@ -42,6 +44,7 @@ export function bundle() {
     meta,
     fixtures: fixtures.fixtures ?? fixtures.rows ?? fixtures,
     careers,
+    inProgress,
   };
 
   const html = readFileSync(SRC, 'utf8');
@@ -68,6 +71,7 @@ export function bundle() {
     days: payload.days.length,
     fixtures: payload.fixtures.length,
     careers: Object.keys(payload.careers).length,
+    inProgress: payload.inProgress.length,
     bytes: out.length,
   };
 }
@@ -76,7 +80,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const s = bundle();
   console.log(
     `bundled ${s.players} players / ${s.perfs} performances / ${s.days} days / ` +
-      `${s.fixtures} fixtures / ${s.careers} careers -> site/offseason-live.html ` +
+      `${s.fixtures} fixtures / ${s.careers} careers / ${s.inProgress} in progress ` +
+      `-> site/offseason-live.html ` +
       `(${(s.bytes / 1024).toFixed(0)} KB)`
   );
 }

@@ -19,7 +19,7 @@ import { PlayerRegistry } from './core/registry.js';
 import { loadSquadFile, resolveSquads, classifySquad } from './core/squads.js';
 import { displayName, stripDisambiguator } from './core/display-name.js';
 import { mergePerformances, mergeStats } from './core/merge.js';
-import { loadStore, expand } from './core/match-days.js';
+import { loadStore, expand, inProgressMatches } from './core/match-days.js';
 import { isMultiDay, MAX_TEST_DAYS } from './sources/crex-match-day.js';
 import { existsSync, readFileSync } from 'node:fs';
 
@@ -522,6 +522,19 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
 
   mkdirSync(OUT_DIR, { recursive: true });
   writeFileSync(`${OUT_DIR}/careers.json`, JSON.stringify(careers));
+
+  // Multi-day matches still being played. CREX's schedule carries only upcoming
+  // limited-overs cards, so a Test is absent from the fixtures for its whole
+  // duration — this is the only place the site can learn one is on.
+  const inProgress = inProgressMatches(dayStore, { asOf: today })
+    .map((m) => ({
+      ...m,
+      players: m.players
+        .map((pl) => ({ ...pl, playerId: mergedInto.get(pl.playerId) ?? pl.playerId }))
+        .filter((pl) => players.has(pl.playerId)),
+    }))
+    .filter((m) => m.players.length);
+  writeFileSync(`${OUT_DIR}/in-progress.json`, JSON.stringify(inProgress));
   writeFileSync(`${OUT_DIR}/days.json`, JSON.stringify(days));
   writeFileSync(`${OUT_DIR}/players.json`, JSON.stringify(playerList));
   // The ranking score, computed here so the page sorts on a tested number rather
