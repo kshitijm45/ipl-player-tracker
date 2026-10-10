@@ -42,6 +42,12 @@ export function needsScorecard(row) {
   // absent badge would mean "never checked" for some matches and "did not win" for
   // others, with nothing to tell them apart.
   if (row.scorecardAt && !row.awardChecked) return true;
+  // Read while the match was still being played, so every figure in it can still
+  // change. A batsman shown "Batting" is genuinely not out *at that moment*, and
+  // recording it is right — but he may be dismissed tomorrow, and marking the row
+  // complete would freeze Pat Cummins at 33* for good. The flag is cleared once the
+  // match is read again after it has finished.
+  if (row.scorecardLive) return true;
   return false;
 }
 
@@ -158,7 +164,7 @@ export function pickInnings(cardRows, row, kind = 'batting') {
 export function enrich(
   byPlayer,
   card,
-  { matchId, slugs = new Map(), potm, awardLookedFor } = {}
+  { matchId, slugs = new Map(), potm, awardLookedFor, live = false } = {}
 ) {
   // Whether the award was looked up at all, as opposed to looked up and not found.
   // A caller that passes `potm: null` tried and the match named nobody; one that
@@ -243,6 +249,10 @@ export function enrich(
       if (touched) {
         rows++;
         row.scorecardAt = new Date().toISOString().slice(0, 10);
+        // Whether what was just read can still change. A finished match never can, so
+        // the row is done; an unfinished one is re-read until it settles.
+        if (live) row.scorecardLive = true;
+        else delete row.scorecardLive;
       }
     }
   }

@@ -72,6 +72,12 @@ export function readDismissal(text) {
   const t = strip(String(text ?? '')).toLowerCase();
   if (!t) return null;
   if (/^not\s*out\b/.test(t)) return false;
+  // A batsman at the crease in a match still being played. The scorecard says
+  // "Batting" where a finished innings says how he went out, and it means the same
+  // thing for an average: he has not been dismissed. Reading it as unknown let the
+  // player page's default stand instead, and the page prints no asterisk — so Pat
+  // Cummins, 33* overnight in a live Test, was published as out for 33.
+  if (/^batting\b/.test(t)) return false;
   // "retired hurt"/"retired not out" end an innings without a dismissal; "retired out"
   // is a dismissal. The bare "retired" is ambiguous, so it is left unknown.
   if (/^retired\s+(hurt|not\s*out)\b/.test(t)) return false;
@@ -89,7 +95,7 @@ export function readDismissal(text) {
  * batting tables sit between them.
  */
 export function parseScorecard(html) {
-  const out = { batting: [], bowling: [] };
+  const out = { batting: [], bowling: [], live: false };
   let nBat = 0;
   let nBowl = 0;
 
@@ -132,11 +138,15 @@ export function parseScorecard(html) {
           maidens: num('m'), runs: num('r'), wickets: num('w'), econ: num('er'),
         });
       } else {
+        const decision = tr.match(/class="decision"[^>]*>([\s\S]*?)<\/div>/)?.[1];
+        // A batter still at the crease means the match has not finished, so every
+        // figure on this card can still change.
+        if (/^\s*batting\b/i.test(strip(String(decision ?? '')))) out.live = true;
         out.batting.push({
           slug, innings,
           runs: num('r'), balls: num('b'),
           fours: num('4s'), sixes: num('6s'), strikeRate: num('sr'),
-          out: readDismissal(tr.match(/class="decision"[^>]*>([\s\S]*?)<\/div>/)?.[1]),
+          out: readDismissal(decision),
         });
       }
     }
@@ -297,7 +307,7 @@ export async function fetchScorecard(
  * the sides, and so the order the match was played.
  */
 export function mergeInnings(views) {
-  const out = { batting: [], bowling: [] };
+  const out = { batting: [], bowling: [], live: views.some((v) => v?.live) };
   for (const kind of ['batting', 'bowling']) {
     const seen = new Set();
     let innings = 0;

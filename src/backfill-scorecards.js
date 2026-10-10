@@ -155,7 +155,7 @@ export async function backfillScorecards({
     // One extra request per match, for the award that sits on the match page rather
     // than its scorecard tab. Null where none is named, which is routine.
     const potm = await fetchPlayerOfMatch({ matchUrl: m.matchUrl ?? card.url });
-    const result = enrich(byPlayer, card, { matchId: m.matchId, slugs, potm });
+    const result = enrich(byPlayer, card, { matchId: m.matchId, slugs, potm, live: card.live });
     enrichedRows += result.rows;
     notOuts += result.notOuts;
     ballsAdded += result.ballsAdded;

@@ -320,3 +320,21 @@ test('a caller that cannot look up the award does not mark it checked', () => {
   enrich(byPlayer, card, { slugs, potm: undefined });
   assert.equal(byPlayer.p1[0].awardChecked, undefined);
 });
+
+test('a row read from a live scorecard stays in the queue', () => {
+  // Everything on a live card can still change. A batsman shown "Batting" is not out
+  // at that moment, which is worth recording — but he may be dismissed tomorrow, and
+  // marking the row complete would freeze Cummins at 33* for good.
+  const byPlayer = { p1: [{ matchId: '11AJ', batting: { runs: 33, balls: 72, out: true } }] };
+  enrich(byPlayer, card, { slugs, potm: null, live: true });
+  assert.equal(byPlayer.p1[0].scorecardLive, true);
+  assert.equal(needsScorecard(byPlayer.p1[0]), true);
+});
+
+test('a finished re-read clears the live flag', () => {
+  const byPlayer = { p1: [{ matchId: '11AJ', batting: { runs: 33, balls: 72, out: true } }] };
+  enrich(byPlayer, card, { slugs, potm: null, live: true });
+  enrich(byPlayer, card, { slugs, potm: null, live: false });
+  assert.equal(byPlayer.p1[0].scorecardLive, undefined);
+  assert.equal(needsScorecard(byPlayer.p1[0]), false, 'and it is finally done');
+});

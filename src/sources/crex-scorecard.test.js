@@ -197,8 +197,8 @@ test('a row with no player link is skipped', () => {
 test('html with no scorecard tables yields nothing', () => {
   // What the short /scoreboard/<id>/ URL actually returns: a five-player "top
   // performers" block and no scorecard table at all.
-  assert.deepEqual(parseScorecard('<div>no tables here</div>'), { batting: [], bowling: [] });
-  assert.deepEqual(parseScorecard(''), { batting: [], bowling: [] });
+  assert.deepEqual(parseScorecard('<div>no tables here</div>'), { batting: [], bowling: [], live: false });
+  assert.deepEqual(parseScorecard(''), { batting: [], bowling: [], live: false });
 });
 
 test('the scorecard url is built from a relative href', () => {
@@ -272,5 +272,33 @@ test('batting and bowling are numbered independently', () => {
 
 test('an empty view contributes nothing', () => {
   const m = mergeInnings([{ batting: [], bowling: [] }, null, undefined]);
-  assert.deepEqual(m, { batting: [], bowling: [] });
+  assert.deepEqual(m, { batting: [], bowling: [], live: false });
+});
+
+test('a batsman at the crease is not out', () => {
+  // A live match says "Batting" where a finished innings says how he went out, and
+  // for an average it means the same thing: he has not been dismissed. Reading it as
+  // unknown let the player page's default stand, and the page prints no asterisk —
+  // so Pat Cummins, 33* overnight in a live Test, was published as out for 33.
+  assert.equal(readDismissal('Batting'), false);
+  assert.equal(readDismissal(' batting '), false);
+});
+
+test('a scorecard with a batsman still in is marked live', () => {
+  const html = `<table><thead><tr>
+    <th>Batter</th><th>R</th><th>B</th><th>4s</th><th>6s</th><th>SR</th>
+  </tr></thead><tbody>
+    <tr><td><a href="/player/pat-cummins-8F">Pat Cummins</a>
+        <div class="decision"> Batting </div></td>
+      <td><div>33</div></td><td><div>72</div></td>
+      <td><div>5</div></td><td><div>0</div></td><td><div>45.83</div></td></tr>
+  </tbody></table>`;
+  const r = parseScorecard(html);
+  assert.equal(r.live, true);
+  assert.equal(r.batting[0].out, false);
+});
+
+test('a finished scorecard is not marked live', () => {
+  const r = parseScorecard(battingTable);
+  assert.equal(r.live, false);
 });
