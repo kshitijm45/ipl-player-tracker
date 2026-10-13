@@ -552,11 +552,22 @@ every re-read of him a short read (20 against 25 held) and so froze the two new 
 Indies T20s behind the short-read guard as well.
 
 The names are not missing from the page, only from that render. The card list has its
-own search box, and typing into it re-renders the matching cards *with* their titles —
-searching "2026" returned ten cards with no blank among them, both of his included. So
-a blank card is resolved by searching for the season and matching on the date window it
-does still carry, which keeps the name CREX's own rather than inferring one. A card
-that still cannot be named is dropped exactly as before.
+own search box, and typing into it re-renders the matching cards *with* their titles.
+
+What to search for is the part worth getting right. A season year looks obvious and is
+wrong: "2026" misses a split season labelled 2025-26, so a blank card from one would
+stay blank — and it returned ten of Tilak Varma's fifteen cards. The **"Played for"
+code** is on every blank card by definition, since it is the half that still renders,
+and it is season-agnostic; searching the codes the blanks themselves carry returned all
+27 of his cards with no blank among them. A player turning out for a team he has never
+played for before needs no change, because the code is read off the card rather than
+listed anywhere.
+
+The recovery can only add a name. Every window passed in is returned, one that cannot
+be named is left exactly as it arrived and dropped as before, and a card that already
+has a name is never overwritten. Clearing the search box leaves the list collapsed to
+its first screenful, so the lazy load is driven again afterwards — without that the
+recovery would cost more cards than it saves.
 
 ## A read that came back short
 
