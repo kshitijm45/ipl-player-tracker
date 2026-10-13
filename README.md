@@ -539,6 +539,25 @@ for any match not already Finished, so the section empties as each one ends. The
 date is still checked, but only as a backstop against a store that missed a refresh:
 a match whose last day has passed cannot be in progress whatever its status says.
 
+## A card rendered without its title
+
+The series list sometimes renders a card with its dates and "Played for" but an empty
+`.seriesName`. It stays empty however long the page is given, however gently it is
+scrolled, and whether or not the card is brought into view — so a scrape reads it as a
+tournament with no name and drops the innings under it, because a row filed under a
+competition no one can recognise is worse than one that is missing.
+
+That cost Tilak Varma his England and Ireland tours: seven innings, which also made
+every re-read of him a short read (20 against 25 held) and so froze the two new West
+Indies T20s behind the short-read guard as well.
+
+The names are not missing from the page, only from that render. The card list has its
+own search box, and typing into it re-renders the matching cards *with* their titles —
+searching "2026" returned ten cards with no blank among them, both of his included. So
+a blank card is resolved by searching for the season and matching on the date window it
+does still carry, which keeps the name CREX's own rather than inferring one. A card
+that still cannot be named is dropped exactly as before.
+
 ## A read that came back short
 
 A re-scrape returning fewer innings than are already held means the scrape did not see

@@ -286,10 +286,18 @@ export class CrexSource extends Source {
 
         // Card labels differ per discipline: a tournament a player only bowled in
         // has no card under Batting.
-        for (const label of await page.$$eval('.sCard', (cs) =>
+        const parsed = (await page.$$eval('.sCard', (cs) =>
           cs.map((c) => (c.textContent || '').replace(/\s+/g, ' ').trim())
-        )) {
-          const w = parseSeriesCard(label);
+        )).map(parseSeriesCard).filter(Boolean);
+
+        // A card CREX rendered without its title is recoverable rather than lost:
+        // searching the list re-renders it named. Without this the innings under it
+        // are dropped, which cost Tilak Varma his England and Ireland tours.
+        const named = parsed.some((w) => !w.name)
+          ? await nameBlankCards(page, parsed)
+          : parsed;
+
+        for (const w of named) {
           if (w?.name && !cardWindows.has(w.name)) cardWindows.set(w.name, w);
         }
 
@@ -834,6 +842,63 @@ export function parseSeriesCard(label) {
   const played = label.match(/Played for\s+([A-Z]{2,4})/)?.[1] ?? null;
   const span = label.match(/([A-Z][a-z]{2}\s\d{1,2})\s*-\s*([A-Z][a-z]{2}\s\d{1,2})/);
   return { name, playedFor: played, from: span?.[1] ?? null, to: span?.[2] ?? null };
+}
+
+/**
+ * Fill in the series cards CREX rendered without a title.
+ *
+ * The lazy-loaded list sometimes leaves `.seriesName` empty — the dates and "Played
+ * for" render, the name does not, and it stays empty however long the page is given or
+ * however gently it is scrolled. A card with no name is dropped, because a row filed
+ * under a competition no one can recognise is worse than one that is missing, so those
+ * innings vanish: Tilak Varma's England and Ireland tours, seven innings between them.
+ *
+ * The names are not missing from the page, only from that render. Typing into the
+ * card list's own search box re-renders the matching cards *with* their titles, and a
+ * season year matches nearly everything — "2026" brought back ten cards with no empty
+ * one among them, the two blanks included.
+ *
+ * So the blanks are resolved by searching rather than by inferring: the name is still
+ * CREX's own, which is the rule this file follows everywhere. Cards whose window
+ * cannot be matched afterwards are left as they were, and dropped as before.
+ */
+async function nameBlankCards(page, windows, seasons = ['2026', '2025']) {
+  const blank = windows.filter((w) => !w.name && w.from && w.to);
+  if (!blank.length) return windows;
+
+  const box = page.locator('input[placeholder*="Series" i]').first();
+  if (!(await box.count().catch(() => 0))) return windows;
+
+  const found = new Map();
+  for (const season of seasons) {
+    if (!blank.some((w) => !found.has(`${w.from}|${w.to}`))) break;
+    try {
+      await box.click({ timeout: 5000 });
+      await box.fill('');
+      await box.pressSequentially(season, { delay: 110 });
+      await page.waitForTimeout(2200);
+      for (const label of await page.$$eval('.sCard', (cs) =>
+        cs.map((c) => (c.textContent || '').replace(/\s+/g, ' ').trim())
+      )) {
+        const w = parseSeriesCard(label);
+        // Matched on the window, which is what a blank card does still carry.
+        if (w?.name && w.from && w.to) found.set(`${w.from}|${w.to}`, w.name);
+      }
+    } catch {
+      // The search is a recovery, not a requirement: a card that cannot be named is
+      // dropped exactly as it was before.
+    }
+  }
+
+  // Leave the box empty so the card walk that follows sees the full list again.
+  try {
+    await box.fill('');
+    await page.waitForTimeout(1200);
+  } catch {}
+
+  return windows.map((w) =>
+    w.name || !w.from ? w : { ...w, name: found.get(`${w.from}|${w.to}`) ?? null }
+  );
 }
 
 /**
