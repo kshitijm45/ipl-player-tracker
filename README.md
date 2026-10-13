@@ -539,6 +539,28 @@ for any match not already Finished, so the section empties as each one ends. The
 date is still checked, but only as a backstop against a store that missed a refresh:
 a match whose last day has passed cannot be in progress whatever its status says.
 
+## A read that came back short
+
+A re-scrape returning fewer innings than are already held means the scrape did not see
+everything: a click that did not land, a lazily-loaded series list that did not finish,
+a page that half-rendered. A player's history only grows, so fewer rows is always a
+fault rather than news.
+
+Such a read must not replace what is held. A run once reported "259 players, 0 failed"
+while seventy of them — Archer, Rashid Khan, Shreyas Iyer — had silently lost every
+innings, because a failed fetch returned an empty list instead of throwing.
+
+But discarding it outright was its own bug, and a quieter one. Tilak Varma played two
+T20s against the West Indies, his re-read came back 20 against 25 held, and the whole
+read was binned — the new innings with it. He sat four days behind, along with de Kock,
+Miller, Dube and Abhishek Sharma, every one of them reported as a short read and none
+of them visibly wrong.
+
+The two are merged instead of chosen between: every held row is kept, and anything the
+short read found that is genuinely new is added. The run log says how many innings were
+taken that way, so a player who reads short every day without ever gaining anything is
+still visible as a scrape problem to chase.
+
 ## Known limits
 
 - A live figure is only as good as what CREX displays mid-innings. The LIVE badge is

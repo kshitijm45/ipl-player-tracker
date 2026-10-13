@@ -160,9 +160,31 @@ export function keepRicher(previous, fresh, slug, { today } = {}) {
   if (fresh.length >= previous.length) {
     return carryScorecard(previous, restoreSettled(previous, fresh, slug, today));
   }
+
+  // A read that came back short is not trusted to replace what is held — a page that
+  // half-rendered would otherwise delete a player's season. But it is not worthless
+  // either, and discarding it outright was its own bug: Tilak Varma played two T20s
+  // against the West Indies, his re-read returned 20 rows where 25 were held, and the
+  // whole read went in the bin — new innings included. He sat four days behind, and
+  // eight other players with him, every one reported as a short read and none of them
+  // visibly wrong.
+  //
+  // So the two are merged rather than chosen between: every previous row is kept, and
+  // anything the short read found that is genuinely new is added to it. Nothing is
+  // lost in either direction.
   shortReads.push({ slug, had: previous.length, got: fresh.length });
-  return previous;
+  const key = (r) => `${r.date ?? ''}|${r.format ?? ''}|${r.fixture ?? ''}|${r.innings ?? ''}`;
+  const held = new Set(previous.map(key));
+  const added = fresh.filter((r) => !held.has(key(r)));
+  if (!added.length) return previous;
+  shortReadAdds.push({ slug, added: added.length });
+  return carryScorecard(previous, [...previous, ...added]).sort((a, b) =>
+    (b.date ?? '').localeCompare(a.date ?? '')
+  );
 }
+
+/** Short reads that still carried innings we did not have. */
+const shortReadAdds = [];
 
 /**
  * How long an innings can still legitimately change.
@@ -416,6 +438,13 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
       console.log(`    ${s.slug} — had ${s.had}, read ${s.got}`);
     }
     if (shortReads.length > 12) console.log(`    …and ${shortReads.length - 12} more`);
+    if (shortReadAdds.length) {
+      const n = shortReadAdds.reduce((a, x) => a + x.added, 0);
+      console.log(
+        `    (${n} new innings taken from those reads anyway, across ` +
+          `${shortReadAdds.length} player${shortReadAdds.length === 1 ? '' : 's'})`
+      );
+    }
   }
   if (lostSettled.length) {
     // Worth naming for the same reason: a read that keeps losing an old tournament

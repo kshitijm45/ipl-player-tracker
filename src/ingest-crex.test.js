@@ -231,3 +231,78 @@ test('the two innings of a Test are restored separately', () => {
   assert.equal(rows.length, 3);
   assert.ok(rows.some((r) => r.innings === 2), 'the second innings came back');
 });
+
+/* ── a short read that still found something ──
+   A re-read returning fewer innings than are held means the scrape did not see
+   everything — a click that did not land, a lazily-loaded list that did not finish.
+   It must not replace what is held: a run once reported "259 players, 0 failed" while
+   seventy of them had silently lost every innings.
+
+   But discarding it outright was its own bug. Tilak Varma played two T20s against the
+   West Indies, his re-read came back 20 against 25 held, and the whole read went in
+   the bin — the new innings with it. He sat four days behind, and eight other players
+   with him, every one reported as a short read and none of them visibly wrong. */
+
+test('a short read still contributes the innings it did find', () => {
+  const previous = [
+    { date: '2026-09-13', format: 'T20', fixture: '1st T20 vs AFG', batting: { runs: 8, balls: 5, out: true } },
+    { date: '2026-09-15', format: 'T20', fixture: '2nd T20 vs AFG', batting: { runs: 11, balls: 11, out: true } },
+    { date: '2026-09-17', format: 'T20', fixture: '3rd T20 vs AFG', batting: { runs: 29, balls: 20, out: true } },
+  ];
+  // Fewer rows than are held, but two of them are new.
+  const fresh = [
+    { date: '2026-09-13', format: 'T20', fixture: '1st T20 vs AFG', batting: { runs: 8, balls: 5, out: true } },
+    { date: '2026-10-09', format: 'T20', fixture: '2nd T20 vs WI', batting: { runs: 44, balls: 18, out: true } },
+  ];
+  const rows = keepRicher(previous, fresh, 'tilak-varma-15Q', { today: '2026-10-13' });
+  assert.equal(rows.length, 4, 'three held plus the one new');
+  assert.ok(rows.some((r) => r.fixture === '2nd T20 vs WI'), 'the new innings arrived');
+  for (const p of previous) {
+    assert.ok(rows.some((r) => r.fixture === p.fixture), `${p.fixture} survived`);
+  }
+});
+
+test('a short read with nothing new changes nothing', () => {
+  const previous = [
+    { date: '2026-09-13', format: 'T20', fixture: 'a', batting: { runs: 8, balls: 5, out: true } },
+    { date: '2026-09-15', format: 'T20', fixture: 'b', batting: { runs: 11, balls: 11, out: true } },
+  ];
+  const rows = keepRicher(previous, [previous[0]], 'x', { today: '2026-10-13' });
+  assert.deepEqual(rows, previous);
+});
+
+test('a short read keeps the rows newest first', () => {
+  const previous = [
+    { date: '2026-09-15', format: 'T20', fixture: 'b', batting: { runs: 11, balls: 11, out: true } },
+    { date: '2026-09-13', format: 'T20', fixture: 'a', batting: { runs: 8, balls: 5, out: true } },
+  ];
+  const fresh = [{ date: '2026-10-11', format: 'T20', fixture: 'new', batting: { runs: 28, balls: 16, out: true } }];
+  const rows = keepRicher(previous, fresh, 'x', { today: '2026-10-13' });
+  assert.deepEqual(rows.map((r) => r.date), ['2026-10-11', '2026-09-15', '2026-09-13']);
+});
+
+test('a short read does not resurrect an innings by its figures alone', () => {
+  // Keyed on date, format, fixture and innings — the same key the rest of the
+  // pipeline uses — so a Test's two innings stay distinct.
+  const previous = [
+    { date: '2026-08-30', format: 'Test', fixture: 'Test', innings: 1, batting: { runs: 16, balls: 27, out: true } },
+  ];
+  const fresh = [
+    { date: '2026-08-30', format: 'Test', fixture: 'Test', innings: 2, batting: { runs: 39, balls: 41, out: false } },
+  ];
+  const rows = keepRicher(previous, fresh, 'x', { today: '2026-10-13' });
+  assert.equal(rows.length, 2);
+});
+
+test('scorecard fields still carry across a short read', () => {
+  const previous = [
+    { date: '2026-09-13', format: 'T20', fixture: 'a',
+      batting: { runs: 8, balls: 5, out: false, outFrom: 'scorecard' } },
+    { date: '2026-09-15', format: 'T20', fixture: 'b', batting: { runs: 11, balls: 11, out: true } },
+  ];
+  const fresh = [{ date: '2026-10-11', format: 'T20', fixture: 'new', batting: { runs: 28, balls: 16, out: true } }];
+  const rows = keepRicher(previous, fresh, 'x', { today: '2026-10-13' });
+  const a = rows.find((r) => r.fixture === 'a');
+  assert.equal(a.batting.out, false);
+  assert.equal(a.batting.outFrom, 'scorecard');
+});
