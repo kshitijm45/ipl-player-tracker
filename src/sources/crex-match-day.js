@@ -267,6 +267,24 @@ function isCorrectionOf(placed, next) {
   return false;
 }
 
+/**
+ * The days this figure was actually being made on.
+ *
+ * Not every day of the match up to the one it closed on, which is what this used to
+ * report: a batsman who came in on day three and was dismissed for 50 read "Days 1-3",
+ * as though he had been at the crease since the first morning. The first day the
+ * figure exists is where it began, and it runs from there to the day it stopped
+ * changing.
+ */
+function daysSpanned(row, days, endDay, which) {
+  const has = (d) => {
+    const f = row.days[d]?.[which];
+    return Boolean(f && (f.runs != null || f.balls != null || f.wickets != null));
+  };
+  const span = days.filter((d) => d <= endDay && has(d));
+  return span.length ? span : [endDay];
+}
+
 export function dailyRows(row) {
   const days = Object.keys(row?.days ?? {})
     .map(Number)
@@ -354,7 +372,7 @@ export function dailyRows(row) {
         date: at.date,
         batting: which === 'batting' ? figures.batting : null,
         bowling: which === 'bowling' ? figures.bowling : null,
-        spanned: placeable.filter((d) => d <= day),
+        spanned: daysSpanned(row, placeable, day, which),
         provisional: settledHalf ? undefined : (at.provisional || undefined),
         multiDay: true,
       };
@@ -375,7 +393,9 @@ export function dailyRows(row) {
     bowling: figures.bowling,
     // Which days the innings actually spanned, so the page can say "over days 2-3"
     // rather than implying it all happened at once.
-    spanned: placeable.filter((d) => d <= endDay),
+    // Spanned by whichever discipline this row is carrying. Where it carries both,
+    // the batting is the one a reader reads the span against.
+    spanned: daysSpanned(row, placeable, endDay, batted ? 'batting' : 'bowling'),
     // An innings still being played: the figure is the running one, not a result.
     provisional: settled ? undefined : (snap.provisional || undefined),
     multiDay: true,

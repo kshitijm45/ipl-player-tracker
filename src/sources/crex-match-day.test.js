@@ -606,3 +606,28 @@ test('spanned covers only the days the innings is placed across', () => {
   };
   assert.deepEqual(dailyRows(row)[0].spanned, [1]);
 });
+
+test('a span covers the days the figure was made on, not the whole match', () => {
+  // A batsman who came in on day three and was dismissed for 50 read "Days 1-3", as
+  // though he had been at the crease since the first morning — the span was every day
+  // of the match up to the one the innings closed on, rather than the days the innings
+  // itself occupied.
+  let row;
+  row = recordSnapshot(row, { day: 1, date: '2026-10-11', bowling: { wickets: 0, runs: 13 } });
+  row = recordSnapshot(row, { day: 2, date: '2026-10-12', bowling: { wickets: 0, runs: 22 } });
+  row = recordSnapshot(row, {
+    day: 3, date: '2026-10-13',
+    batting: { runs: 50, balls: 79, out: true }, bowling: { wickets: 0, runs: 22 },
+  });
+
+  const bat = dailyRows(row).find((r) => r.batting);
+  assert.deepEqual(bat.spanned, [3], 'he batted on day three only');
+});
+
+test('an overnight innings still spans the days it was built over', () => {
+  // The case the span exists for: 102 off 209 balls really did take two days.
+  let row;
+  row = recordSnapshot(row, { day: 1, date: '2026-10-11', batting: { runs: 60, balls: 120, out: false } });
+  row = recordSnapshot(row, { day: 2, date: '2026-10-12', batting: { runs: 102, balls: 209, out: true } });
+  assert.deepEqual(dailyRows(row)[0].spanned, [1, 2]);
+});

@@ -589,6 +589,15 @@ single row dated day three — the hundred in the wrong place, and the spell inv
 anything ranking the day's bowling, because the row it belonged to was being shown for
 its batting. Ravindra Jadeja's were exactly that.
 
+### How many days an innings took
+
+The span under a figure used to be every day of the match up to the one the innings
+closed on, which overstates almost all of them: a batsman who came in on day three and
+was dismissed for 50 read "Days 1-3", as though he had been at the crease since the
+first morning. It is now the days the figure was actually being made on — the first day
+it exists through to the day it stopped changing — so an overnight hundred still reads
+"Days 1-2" and a single session's innings reads one day.
+
 ## A read that came back short
 
 A re-scrape returning fewer innings than are already held means the scrape did not see
