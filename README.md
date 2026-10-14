@@ -569,6 +569,26 @@ has a name is never overwritten. Clearing the search box leaves the list collaps
 its first screenful, so the lazy load is driven again afterwards — without that the
 recovery would cost more cards than it saves.
 
+## Batting and bowling do not finish together
+
+A multi-day row used to be dated by whichever of its figures moved last, which is right
+only while the two move together. Ayush Badoni was dismissed for 23 on day one of a
+Ranji match and then took 5 for 43 over the next two days: his innings was dated day
+three along with the spell, where it sat beside the second innings he really did play
+that day — so he appeared twice on one date, once with a score he had made 48 hours
+earlier.
+
+Each discipline is dated by when *it* stopped moving. Where the two close on different
+days the row is split, so an innings played on day one stays on day one whatever the
+bowler did afterwards, and the spell is reported on the day it ended. A row whose
+disciplines close together is not split, which is almost all of them.
+
+It also fixes a figure going missing. One row carries one batting figure and one
+bowling figure, so a 102 made on day two and a 3 for 40 taken on day three were a
+single row dated day three — the hundred in the wrong place, and the spell invisible to
+anything ranking the day's bowling, because the row it belonged to was being shown for
+its batting. Ravindra Jadeja's were exactly that.
+
 ## A read that came back short
 
 A re-scrape returning fewer innings than are already held means the scrape did not see

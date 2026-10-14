@@ -289,7 +289,14 @@ export function dailyRows(row) {
   // the most recent day it can be stated completely.
   const placeable = settledDays.length ? settledDays : days;
 
-  const endDay = lastDayThatMoved(row, placeable);
+  // Each discipline is dated by when *it* stopped moving, because they do not finish
+  // together. Ayush Badoni was dismissed for 23 on day one and then took 5 for 43 over
+  // the next two days: dating the pair by whichever moved last put his day-one innings
+  // on day three, where it sat beside the second innings he really did play that day
+  // and showed him twice on one date.
+  const batDay = lastDayThatMoved(row, placeable, 'batting');
+  const bowlDay = lastDayThatMoved(row, placeable, 'bowling');
+  const endDay = Math.max(batDay, bowlDay);
 
   const snap = row.days[endDay];
   if (!snap) return [];
@@ -333,6 +340,28 @@ export function dailyRows(row) {
   const bowled = figures.bowling && (figures.bowling.wickets || figures.bowling.runs);
   if (!batted && !bowled) return [];
 
+  // Where the two closed on different days, each is reported on its own — an innings
+  // played on day one belongs on day one whatever the bowler did afterwards. They are
+  // only split when both exist and the days genuinely differ; otherwise this is the
+  // single row it has always been.
+  if (batted && bowled && batDay !== bowlDay) {
+    const half = (day, which) => {
+      const at = row.days[day];
+      if (!at) return null;
+      const settledHalf = day < placeable[placeable.length - 1] || !at.provisional;
+      return {
+        day,
+        date: at.date,
+        batting: which === 'batting' ? figures.batting : null,
+        bowling: which === 'bowling' ? figures.bowling : null,
+        spanned: placeable.filter((d) => d <= day),
+        provisional: settledHalf ? undefined : (at.provisional || undefined),
+        multiDay: true,
+      };
+    };
+    return [half(batDay, 'batting'), half(bowlDay, 'bowling')].filter(Boolean);
+  }
+
   // A figure is still running only while the match it belongs to is. A later day
   // observed without the figure moving is itself the evidence that it has settled —
   // including for a batsman left not out, whose innings ended by a declaration or by
@@ -369,33 +398,38 @@ export function dailyRows(row) {
  * correction of an earlier reading rather than new play, and the day it arrived on is
  * not the day the innings ended.
  */
-function lastDayThatMoved(row, days) {
+function lastDayThatMoved(row, days, only = null) {
   let last = days[0];
   let prev = null;
   for (const day of days) {
     const s = row.days[day];
     if (!prev) { prev = s; continue; }
 
-    const advanced =
+    const batGrew =
       gained(s.batting?.runs, prev.batting?.runs) ||
-      gained(s.batting?.balls, prev.batting?.balls) ||
+      gained(s.batting?.balls, prev.batting?.balls);
+    const bowlGrew =
       gained(s.bowling?.wickets, prev.bowling?.wickets) ||
       gained(s.bowling?.runs, prev.bowling?.runs);
+
+    // `only` narrows this to one discipline, because the two do not finish together.
+    // A batsman dismissed on day one who then bowls through day three has a settled
+    // innings and a running spell, and dating the pair by whichever moved last drags
+    // the finished one forward with it.
+    const advanced =
+      only === 'batting' ? batGrew : only === 'bowling' ? bowlGrew : batGrew || bowlGrew;
+    if (!advanced) { prev = s; continue; }
 
     // Nothing in an innings continues after the dismissal, so a figure that grows
     // once the batsman is out is another reading of the same innings, not more of it.
     const wasOut = Boolean(prev.batting?.out);
-    const batOnly =
-      advanced &&
-      !gained(s.bowling?.wickets, prev.bowling?.wickets) &&
-      !gained(s.bowling?.runs, prev.bowling?.runs);
+    const batOnly = batGrew && !bowlGrew;
 
-    if (advanced && !(wasOut && batOnly)) last = day;
+    if (!(wasOut && batOnly)) last = day;
     prev = s;
   }
   return last;
 }
-
 /** Did this figure move forward? A fall is a correction, not play. */
 function gained(now, before) {
   return (now ?? 0) > (before ?? 0);

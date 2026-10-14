@@ -426,9 +426,13 @@ test('a figure cannot grow after the batsman is out', () => {
   assert.equal(r.batting.runs, 44);
 });
 
-test('a bowler adding wickets after the batsman is out still advances the day', () => {
-  // He was dismissed on day 2 but bowled on day 3: the row belongs to day 3, because
-  // bowling is real new play rather than a re-reading.
+test('a bowler adding wickets after the batsman is out keeps each on its own day', () => {
+  // He was dismissed on day 2 and bowled on day 3. Bowling is real new play rather
+  // than a re-reading, so it belongs to day 3 — but his innings still ended on day 2,
+  // and dating the pair together dragged it forward with the spell. Ayush Badoni was
+  // dismissed for 23 on day one and took 5 for 43 over the two days after, which put
+  // that innings on day three beside the second innings he really did play there, and
+  // showed him twice on one date.
   let row;
   row = recordSnapshot(row, {
     day: 2, date: '2026-10-02',
@@ -438,9 +442,42 @@ test('a bowler adding wickets after the batsman is out still advances the day', 
     day: 3, date: '2026-10-03',
     batting: { runs: 20, balls: 40, out: true }, bowling: { wickets: 4, runs: 72 },
   });
-  const r = dailyRows(row)[0];
-  assert.equal(r.date, '2026-10-03');
-  assert.deepEqual(r.bowling, { wickets: 4, runs: 72 });
+  const rows = dailyRows(row);
+  assert.equal(rows.length, 2);
+
+  const bat = rows.find((r) => r.batting);
+  assert.equal(bat.date, '2026-10-02', 'the innings ended on day 2');
+  assert.equal(bat.batting.runs, 20);
+  assert.equal(bat.bowling, null, 'and carries no bowling of its own');
+
+  const bowl = rows.find((r) => r.bowling);
+  assert.equal(bowl.date, '2026-10-03', 'the spell ran to day 3');
+  assert.deepEqual(bowl.bowling, { wickets: 4, runs: 72 });
+});
+
+test('a row whose disciplines close together is not split', () => {
+  // The common case, and the one that must not change: both finished on the same day,
+  // so it stays the single row it has always been.
+  let row;
+  row = recordSnapshot(row, {
+    day: 1, date: '2026-10-01',
+    batting: { runs: 20, balls: 40, out: true }, bowling: { wickets: 2, runs: 30 },
+  });
+  row = recordSnapshot(row, {
+    day: 2, date: '2026-10-02',
+    batting: { runs: 20, balls: 40, out: true }, bowling: { wickets: 2, runs: 30 },
+  });
+  const rows = dailyRows(row);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].batting.runs, 20);
+  assert.deepEqual(rows[0].bowling, { wickets: 2, runs: 30 });
+});
+
+test('a batting-only innings is never split', () => {
+  let row;
+  row = recordSnapshot(row, { day: 1, date: '2026-10-01', batting: { runs: 50, balls: 90, out: true } });
+  row = recordSnapshot(row, { day: 2, date: '2026-10-02', batting: { runs: 50, balls: 90, out: true } });
+  assert.equal(dailyRows(row).length, 1);
 });
 
 /* ── the badge belongs to the match ──
