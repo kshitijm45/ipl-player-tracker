@@ -631,3 +631,50 @@ test('an overnight innings still spans the days it was built over', () => {
   row = recordSnapshot(row, { day: 2, date: '2026-10-12', batting: { runs: 102, balls: 209, out: true } });
   assert.deepEqual(dailyRows(row)[0].spanned, [1, 2]);
 });
+
+/* ── the day a match finished on ──
+   CREX deletes the day marker the moment a match ends, so a match that finished
+   between two runs hands back its closing day's figures with nothing to date them.
+   They were dropped, and with them the last day of every Ranji match in the round:
+   Ayush Badoni's second innings stayed at the 24* he was on overnight when he had
+   finished on 85, and Salil Arora's 110 was published as the 25 he had by stumps. */
+
+test('a match that finished since the last run places its closing day', () => {
+  // Day 3 was the last one observed, so the figures now arriving are day 4's.
+  const r = resolveDay({
+    label: null, startDate: '2026-10-11', endDate: '2026-10-15',
+    observedOn: '2026-10-14', status: 'Finished', lastSeenDay: 3,
+  });
+  assert.equal(r.day, 4);
+  assert.equal(r.date, '2026-10-14');
+  assert.equal(r.from, 'closing');
+});
+
+test('a match never seen live still cannot be dated', () => {
+  // The case that genuinely has no recoverable day anywhere on CREX. It keeps the
+  // match start date, exactly as before.
+  const r = resolveDay({
+    label: null, startDate: '2026-10-11', endDate: '2026-10-15',
+    observedOn: '2026-10-14', status: 'Finished',
+  });
+  assert.equal(r.day, null);
+  assert.equal(r.from, 'finished');
+});
+
+test('the closing day cannot run past the end of the match', () => {
+  // A run landing days late must not invent a sixth day of a five-day match.
+  const r = resolveDay({
+    label: null, startDate: '2026-10-11', endDate: '2026-10-14',
+    observedOn: '2026-10-20', status: 'Finished', lastSeenDay: 4,
+  });
+  assert.equal(r.day, null);
+});
+
+test('a live match still prefers its own day label', () => {
+  const r = resolveDay({
+    label: 2, startDate: '2026-10-11', observedOn: '2026-10-12',
+    status: 'Live', lastSeenDay: 1,
+  });
+  assert.equal(r.day, 2);
+  assert.equal(r.from, 'label');
+});

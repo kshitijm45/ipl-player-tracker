@@ -15,7 +15,7 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { CrexSource } from './sources/crex.js';
-import { isMultiDay, resolveDay, stillCapturable } from './sources/crex-match-day.js';
+import { isMultiDay, resolveDay, stillCapturable, MAX_TEST_DAYS } from './sources/crex-match-day.js';
 import { hasFeed, inningsDays } from './sources/crex-commentary.js';
 import { loadStore, saveStore, observe } from './core/match-days.js';
 
@@ -557,7 +557,23 @@ async function recordMatchDays(source, byPlayer) {
     // Deliberately not keyed on `settled`, which is only set when a feed walk
     // completed. A finished match with no feed can never be settled, and that is
     // exactly the case that was being re-read indefinitely.
-    if (known?.status === 'Finished') continue;
+    // A match already known to be finished needs no further reads — except once,
+    // when it finished since the last run and its closing day has not been recorded.
+    // CREX deletes the day marker as a match ends, so that last day's figures arrive
+    // undateable and were dropped: every Ranji match in the round lost its fourth
+    // day, and Badoni's second innings stayed at the 24* he was on overnight when he
+    // had finished on 85.
+    const seenDays = Object.values(store.rows ?? {})
+      .filter((r) => r.matchId === matchId)
+      .flatMap((r) => Object.keys(r.days ?? {}).map(Number))
+      .filter((d) => d >= 1);
+    const lastSeenDay = seenDays.length ? Math.max(...seenDays) : 0;
+    const closingDayMissing =
+      lastSeenDay >= 1 &&
+      known?.endDate &&
+      lastSeenDay < (dayNumber(known.startDate, known.endDate) ?? MAX_TEST_DAYS);
+
+    if (known?.status === 'Finished' && !closingDayMissing) continue;
 
     // Cached for a finished match, refetched for one in progress. `fetchMatchDay`
     // keeps a Finished result permanently, so this only costs a request while the
@@ -609,8 +625,10 @@ async function recordMatchDays(source, byPlayer) {
         : resolveDay({
             label: meta?.day,
             startDate: meta?.startDate,
+            endDate: meta?.endDate,
             observedOn,
             status: meta?.status,
+            lastSeenDay,
           });
 
       if (!(day >= 1)) {

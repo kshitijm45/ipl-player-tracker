@@ -589,6 +589,24 @@ single row dated day three — the hundred in the wrong place, and the spell inv
 anything ranking the day's bowling, because the row it belonged to was being shown for
 its batting. Ravindra Jadeja's were exactly that.
 
+### The day a match finished on
+
+CREX deletes the `Day N` marker the moment a match ends, so a match that finished
+between two runs hands back its closing day's figures with nothing to date them — and
+they were dropped. Every Ranji match in the 11–15 October round lost its fourth day
+that way: 49, 36 and 52 innings on the 11th, 12th and 13th, then nothing on the 14th.
+
+What was published was each player's overnight figure. Ayush Badoni's second innings
+read 24\* when he had finished on 85; Salil Arora's 110 off 152 was published as the 25
+he had by stumps on day three.
+
+It is recoverable precisely because those matches were seen live before. The store
+knows the last day it observed, so the day now being read is the one after it, bounded
+by the match's own end date — a run landing days late cannot invent a sixth day of a
+five-day match. A match that was *never* seen live still cannot be dated, which is the
+case that genuinely has no day information anywhere on CREX, and those innings keep the
+match start date exactly as before.
+
 ### How many days an innings took
 
 The span under a figure used to be every day of the match up to the one the innings

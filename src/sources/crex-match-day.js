@@ -161,9 +161,29 @@ export function dayOfDate(startDate, date) {
  * a run can land in the middle of a day's play or between two of them. That is why
  * the label is preferred and why nothing here assumes the run happened at stumps.
  */
-export function resolveDay({ label, startDate, observedOn, status }) {
+export function resolveDay({ label, startDate, endDate, observedOn, status, lastSeenDay }) {
   if (label >= 1) {
     return { day: label, date: dateOfDay(startDate, label) ?? observedOn, from: 'label' };
+  }
+
+  // A match that finished between two runs, whose earlier days this project did watch.
+  //
+  // CREX deletes the day marker the moment a match ends, so the closing day's figures
+  // arrive with nothing to date them and were dropped — and with them the last day of
+  // every Ranji match in a round. Ayush Badoni's second innings stayed at the 24* he
+  // was on overnight when he had finished on 85, and Salil Arora's 110 was published
+  // as the 25 he had made by stumps on day three.
+  //
+  // It is recoverable precisely because the match was seen live before: the store
+  // knows the last day it observed, and the day now being read is the one after it.
+  // `endDate` bounds that, so a run landing days late cannot invent a sixth day of a
+  // five-day match.
+  if (status && status !== 'Live' && lastSeenDay >= 1) {
+    const next = lastSeenDay + 1;
+    const last = endDate ? dayOfDate(startDate, endDate) : MAX_TEST_DAYS;
+    if (next <= Math.min(last || MAX_TEST_DAYS, MAX_TEST_DAYS)) {
+      return { day: next, date: dateOfDay(startDate, next) ?? observedOn, from: 'closing' };
+    }
   }
 
   // A finished match has no day marker, and the observation date is after the last
