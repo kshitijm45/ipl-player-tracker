@@ -382,6 +382,21 @@ figures are not a problem, since whichever is taken contributes the same fields;
 still ambiguous is left alone. `--repair` re-reads the multi-innings matches and
 overwrites what the number-matching got wrong.
 
+### The players the backfill could not see
+
+The scorecard keys players by slug and the performance store keys them by canonical id,
+so the pin file is the bridge. A player with no Cricsheet id has no canonical id: he is
+pinned by name in `slugPins` and his innings are stored under his slug.
+
+The bridge only read `pins`, so all 23 of those players were invisible to the backfill —
+the lookup returned undefined and every one of their rows was skipped. Wanindu
+Hasaranga's 23 bowling innings never received their balls bowled, which is why he had no
+economy and no strike rate at all, and 167 rows across those players had never been
+enriched by anything.
+
+Nothing reported a problem. A full backfill read 848 of 848 scorecards and announced
+success, having added balls to 20 innings.
+
 ### Running the backfill
 
 ```bash

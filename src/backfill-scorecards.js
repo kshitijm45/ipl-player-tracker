@@ -50,10 +50,18 @@ const SAVE_EVERY = 25;
  * No name matching: a scorecard row whose slug is not pinned is simply not ours.
  */
 export function slugsById(raw) {
-  const pins = raw?.pins ?? {};
   const out = new Map();
-  for (const [playerId, pin] of Object.entries(pins)) {
+  for (const [playerId, pin] of Object.entries(raw?.pins ?? {})) {
     if (pin?.slug) out.set(playerId, pin.slug);
+  }
+  // A player with no Cricsheet id is pinned by name and his innings are stored under
+  // his slug, so the slug is both the key and the value. Reading only `pins` left all
+  // 23 of them invisible to the backfill: `slugs.get(playerId)` came back undefined
+  // and every row was skipped, so Wanindu Hasaranga's 23 bowling innings never got
+  // their balls bowled and he had no economy or strike rate at all. The run reported
+  // success either way — 848 of 848 scorecards read, and 20 innings given balls.
+  for (const pin of Object.values(raw?.slugPins ?? {})) {
+    if (pin?.slug) out.set(pin.slug, pin.slug);
   }
   return out;
 }
