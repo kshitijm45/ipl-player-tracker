@@ -607,6 +607,18 @@ five-day match. A match that was *never* seen live still cannot be dated, which 
 case that genuinely has no day information anywhere on CREX, and those innings keep the
 match start date exactly as before.
 
+### A flag that outlives its match
+
+`provisional` records that the *match* was live when a day was read, which is not the
+same as that day being unfinished — and once the match is over, every day of it is
+settled whatever was true at the time.
+
+Treating those old flags as disqualifying collapsed a whole match onto the single day
+read after it ended. Ravindra Jadeja's 102, made on day two, and his 3 for 40, finished
+on day three, both appeared on day four, which was the only day the match had not been
+live for. The flags are honoured only while the match can still change: a row whose
+last day is settled is a finished match, and all of its days are placeable.
+
 ### How many days an innings took
 
 The span under a figure used to be every day of the match up to the one the innings

@@ -321,10 +321,21 @@ export function dailyRows(row) {
   // the dismissal adds nothing the comparison does not already know.
   // Days whose play had finished when they were read. An innings is only ever placed
   // on one of these, because a day still in progress has no figure to state.
-  const settledDays = days.filter((d) => !row.days[d]?.provisional);
-  // While the current day is still being played, the innings belongs to the last day
-  // that finished — and moves forward as each day closes, so it is published once, on
-  // the most recent day it can be stated completely.
+  //
+  // `provisional` records that the *match* was live when the day was read, which is
+  // not the same as the day being unfinished — and once the match is over, every day
+  // of it is settled whatever was true at the time. Treating the old flags as
+  // disqualifying collapsed a whole match onto the single day read after it ended:
+  // Ravindra Jadeja's 102, made on day two, and his 3 for 40, finished on day three,
+  // both appeared on day four, which was the only day not marked provisional.
+  //
+  // So the flags are honoured only while the match can still change. A row whose last
+  // day is settled is a finished match, and all of its days are placeable.
+  const matchOver = !row.days[days[days.length - 1]]?.provisional;
+  const settledDays = matchOver ? days : days.filter((d) => !row.days[d]?.provisional);
+  // While the match is still being played, the innings belongs to the last day that
+  // finished — and moves forward as each day closes, so it is published once, on the
+  // most recent day it can be stated completely.
   const placeable = settledDays.length ? settledDays : days;
 
   // Each discipline is dated by when *it* stopped moving, because they do not finish

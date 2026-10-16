@@ -678,3 +678,42 @@ test('a live match still prefers its own day label', () => {
   assert.equal(r.day, 2);
   assert.equal(r.from, 'label');
 });
+
+test('a finished match places its innings on the days they were played', () => {
+  // `provisional` records that the *match* was live when a day was read, not that the
+  // day was unfinished. Once the match is over every day of it is settled, so treating
+  // the old flags as disqualifying collapsed the whole match onto the one day read
+  // after it ended: Ravindra Jadeja's 102, made on day two, and his 3 for 40, finished
+  // on day three, both appeared on day four.
+  const row = {
+    innings: 1,
+    days: {
+      1: { date: '2026-10-11', batting: { runs: 72, out: true, balls: 154 }, provisional: true },
+      2: { date: '2026-10-12', batting: { runs: 102, out: false, balls: 209 }, bowling: { wickets: 0, runs: 13 }, provisional: true },
+      3: { date: '2026-10-13', batting: { runs: 102, out: true, balls: 209 }, bowling: { wickets: 3, runs: 40 }, provisional: true },
+      // The day read after the match finished, and the only one not flagged.
+      4: { date: '2026-10-14', batting: { runs: 102, out: true, balls: 209 }, bowling: { wickets: 3, runs: 40 } },
+    },
+  };
+  const rows = dailyRows(row);
+  const bat = rows.find((r) => r.batting);
+  const bowl = rows.find((r) => r.bowling);
+  assert.equal(bat.day, 2, 'the hundred was made on day two');
+  assert.equal(bowl.day, 3, 'the spell finished on day three');
+  assert.ok(!rows.some((r) => r.day === 4), 'nothing belongs to day four');
+});
+
+test('a match still live still withholds the day being played', () => {
+  // The rule this must not undo: while the match can change, today's play is not
+  // reported, and the innings sits on the last day that finished.
+  const row = {
+    innings: 1,
+    days: {
+      1: { date: '2026-10-11', batting: { runs: 80, out: false, balls: 150 } },
+      2: { date: '2026-10-12', batting: { runs: 120, out: false, balls: 210 }, provisional: true },
+    },
+  };
+  const r = dailyRows(row)[0];
+  assert.equal(r.day, 1);
+  assert.equal(r.batting.runs, 80);
+});
