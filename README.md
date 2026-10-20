@@ -643,6 +643,18 @@ first morning. It is now the days the figure was actually being made on — the 
 it exists through to the day it stopped changing — so an overnight hundred still reads
 "Days 1-2" and a single session's innings reads one day.
 
+## A reading that outlives its innings
+
+The scorecard's fields are carried across a re-scrape, because the player page cannot
+produce them — but only while the innings is the same one. A figure that has moved on
+is a different innings in every respect that matters.
+
+Ayush Badoni was 115\* when the scorecard was last read and went on to 217. Carrying
+that reading forward put its dismissal, its fours and its sixes onto the bigger score:
+"not out" reinstated on an innings that had since ended, and 11 fours credited to one
+that made 22. The carry now requires the runs and balls to match, so a moved-on innings
+drops the stale reading and is queued to be read again.
+
 ## A read that came back short
 
 A re-scrape returning fewer innings than are already held means the scrape did not see
