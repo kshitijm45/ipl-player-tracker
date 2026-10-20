@@ -306,3 +306,40 @@ test('scorecard fields still carry across a short read', () => {
   assert.equal(a.batting.out, false);
   assert.equal(a.batting.outFrom, 'scorecard');
 });
+
+test('a scorecard reading is not carried onto an innings that moved on', () => {
+  // Ayush Badoni was 115* when the scorecard was last read and went on to 217.
+  // Carrying that reading forward put its dismissal, fours and sixes on the bigger
+  // score — reinstating "not out" onto an innings that had since ended, and
+  // crediting 11 fours to one that made 22.
+  const previous = [{
+    date: '2026-10-18', format: 'Test', fixture: '23rd Test, 1st Inn', matchId: '146Y',
+    batting: { runs: 115, balls: 149, out: false, outFrom: 'scorecard', fours: 11, sixes: 2 },
+  }];
+  const fresh = [{
+    date: '2026-10-18', format: 'Test', fixture: '23rd Test, 1st Inn', matchId: '146Y',
+    batting: { runs: 217, balls: 246, out: true },
+  }];
+  const [row] = keepRicher(previous, fresh, 'ayush-badoni-5P9', { today: '2026-10-20' });
+  assert.equal(row.batting.runs, 217);
+  assert.equal(row.batting.out, true, 'the innings had ended');
+  assert.equal(row.batting.outFrom, undefined, 'and needs reading again');
+  assert.equal(row.batting.fours, undefined, 'the old boundary count belonged to 115');
+});
+
+test('a scorecard reading is kept while the innings is unchanged', () => {
+  // The case the carry exists for: the page gives the same figure and no asterisk,
+  // so the dismissal the scorecard established has to survive.
+  const previous = [{
+    date: '2026-10-18', format: 'Test', fixture: 'f', matchId: '146Y',
+    batting: { runs: 115, balls: 149, out: false, outFrom: 'scorecard', fours: 11, sixes: 2 },
+  }];
+  const fresh = [{
+    date: '2026-10-18', format: 'Test', fixture: 'f', matchId: '146Y',
+    batting: { runs: 115, balls: 149, out: true },
+  }];
+  const [row] = keepRicher(previous, fresh, 'x', { today: '2026-10-20' });
+  assert.equal(row.batting.out, false, 'he was not out');
+  assert.equal(row.batting.outFrom, 'scorecard');
+  assert.equal(row.batting.fours, 11);
+});

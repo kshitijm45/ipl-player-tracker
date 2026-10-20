@@ -273,7 +273,15 @@ function carryScorecard(previous, fresh) {
     }
     // Only a dismissal the scorecard established is worth carrying; the page's own
     // `out` is not knowledge, which is the whole reason the backfill exists.
-    if (had.batting?.outFrom === 'scorecard' && out.batting) {
+    // Only while the innings is the same one. A figure that has moved on is a
+    // different innings in every respect that matters: Ayush Badoni was 115* when the
+    // scorecard was last read and went on to 217, and carrying that reading forward
+    // would have put its dismissal, its fours and its sixes on the bigger score —
+    // reinstating "not out" onto an innings that had since ended, and crediting 11
+    // fours to one that had 22.
+    const sameInnings =
+      had.batting?.runs === out.batting?.runs && had.batting?.balls === out.batting?.balls;
+    if (had.batting?.outFrom === 'scorecard' && out.batting && sameInnings) {
       out.batting = {
         ...out.batting,
         out: had.batting.out,
