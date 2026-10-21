@@ -174,11 +174,36 @@ export function keepRicher(previous, fresh, slug, { today } = {}) {
   // lost in either direction.
   shortReads.push({ slug, had: previous.length, got: fresh.length });
   const key = (r) => `${r.date ?? ''}|${r.format ?? ''}|${r.fixture ?? ''}|${r.innings ?? ''}`;
+  const byKey = new Map(fresh.map((r) => [key(r), r]));
+
+  // A short read still reports on the innings it did see, and those readings are
+  // newer than the ones held. Keeping only the previous row meant a figure that had
+  // moved on could never land: Ayush Badoni went from 115 to 217, his page said 217,
+  // and every run read it and threw it away because he read short — sixteen rows
+  // against eighteen held, for reasons that had nothing to do with that innings.
+  //
+  // Only a figure that has actually advanced is taken. A short read that reports
+  // *less* is the half-rendered page the guard exists for, and must not overwrite a
+  // fuller figure with a smaller one.
+  let updated = 0;
+  const merged = previous.map((p) => {
+    const f = byKey.get(key(p));
+    if (!f) return p;
+    const grew =
+      (f.batting?.runs ?? -1) > (p.batting?.runs ?? -1) ||
+      (f.batting?.balls ?? -1) > (p.batting?.balls ?? -1) ||
+      (f.bowling?.wickets ?? -1) > (p.bowling?.wickets ?? -1) ||
+      (f.bowling?.runs ?? -1) > (p.bowling?.runs ?? -1);
+    if (!grew) return p;
+    updated++;
+    return { ...p, ...f };
+  });
+
   const held = new Set(previous.map(key));
   const added = fresh.filter((r) => !held.has(key(r)));
-  if (!added.length) return previous;
-  shortReadAdds.push({ slug, added: added.length });
-  return carryScorecard(previous, [...previous, ...added]).sort((a, b) =>
+  if (!added.length && !updated) return previous;
+  if (added.length || updated) shortReadAdds.push({ slug, added: added.length, updated });
+  return carryScorecard(previous, [...merged, ...added]).sort((a, b) =>
     (b.date ?? '').localeCompare(a.date ?? '')
   );
 }
@@ -448,9 +473,10 @@ export async function ingest({ concurrency = CONCURRENCY, limit = Infinity, seas
     if (shortReads.length > 12) console.log(`    …and ${shortReads.length - 12} more`);
     if (shortReadAdds.length) {
       const n = shortReadAdds.reduce((a, x) => a + x.added, 0);
+      const u = shortReadAdds.reduce((a, x) => a + (x.updated ?? 0), 0);
       console.log(
-        `    (${n} new innings taken from those reads anyway, across ` +
-          `${shortReadAdds.length} player${shortReadAdds.length === 1 ? '' : 's'})`
+        `    (${n} new and ${u} advanced innings taken from those reads anyway, ` +
+          `across ${shortReadAdds.length} player${shortReadAdds.length === 1 ? '' : 's'})`
       );
     }
   }

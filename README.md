@@ -672,10 +672,18 @@ read was binned — the new innings with it. He sat four days behind, along with
 Miller, Dube and Abhishek Sharma, every one of them reported as a short read and none
 of them visibly wrong.
 
-The two are merged instead of chosen between: every held row is kept, and anything the
-short read found that is genuinely new is added. The run log says how many innings were
-taken that way, so a player who reads short every day without ever gaining anything is
-still visible as a scrape problem to chase.
+The two are merged instead of chosen between: every held row is kept, anything the
+short read found that is genuinely new is added, and an innings whose figure has
+advanced is updated from it. That last part was missing at first, and it mattered:
+Ayush Badoni went from 115 to 217, his page said 217, and every run read it and threw
+it away because he read short — sixteen rows against eighteen held, for reasons that
+had nothing to do with that innings.
+
+Only a figure that has grown is taken. A short read reporting *less* is the
+half-rendered page the guard exists for, and must not overwrite a fuller figure with a
+smaller one. The run log says how many innings were added and how many advanced, so a
+player who reads short every day without ever gaining anything is still visible as a
+scrape problem to chase.
 
 ## Known limits
 

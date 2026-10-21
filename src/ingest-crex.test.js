@@ -343,3 +343,52 @@ test('a scorecard reading is kept while the innings is unchanged', () => {
   assert.equal(row.batting.outFrom, 'scorecard');
   assert.equal(row.batting.fours, 11);
 });
+
+test('a short read updates an innings whose figure advanced', () => {
+  // The merge added innings the short read found but never updated ones already held,
+  // so a figure that moved on could not land. Ayush Badoni went from 115 to 217, his
+  // page said 217, and every run read it and discarded it because he read short —
+  // sixteen rows against eighteen, for reasons nothing to do with that innings.
+  const previous = [
+    { date: '2026-10-18', format: 'Test', fixture: '23rd Test, 1st Inn', matchId: '146Y',
+      batting: { runs: 115, balls: 149, out: true, outFrom: 'scorecard', fours: 11, sixes: 2 } },
+    { date: '2026-09-01', format: 'T20', fixture: 'a', batting: { runs: 5, balls: 4, out: true } },
+    { date: '2026-09-02', format: 'T20', fixture: 'b', batting: { runs: 6, balls: 5, out: true } },
+  ];
+  const fresh = [
+    { date: '2026-10-18', format: 'Test', fixture: '23rd Test, 1st Inn', matchId: '146Y',
+      batting: { runs: 217, balls: 246, out: true } },
+  ];
+  const [row] = keepRicher(previous, fresh, 'ayush-badoni-5P9', { today: '2026-10-21' });
+  assert.equal(row.batting.runs, 217);
+  assert.equal(row.batting.balls, 246);
+  assert.equal(row.batting.fours, undefined, 'the reading taken at 115 does not follow');
+});
+
+test('a short read cannot shrink a figure it already holds', () => {
+  // The guard the short-read rule exists for: a half-rendered page reporting less
+  // must not overwrite the fuller figure.
+  const previous = [
+    { date: '2026-10-18', format: 'Test', fixture: 'f', matchId: '146Y',
+      batting: { runs: 115, balls: 149, out: true } },
+    { date: '2026-09-01', format: 'T20', fixture: 'a', batting: { runs: 5, balls: 4, out: true } },
+  ];
+  const fresh = [
+    { date: '2026-10-18', format: 'Test', fixture: 'f', matchId: '146Y',
+      batting: { runs: 50, balls: 60, out: true } },
+  ];
+  const [row] = keepRicher(previous, fresh, 'x', { today: '2026-10-21' });
+  assert.equal(row.batting.runs, 115);
+});
+
+test('a short read updates an advancing bowling figure too', () => {
+  const previous = [
+    { date: '2026-10-18', format: 'Test', fixture: 'f', matchId: 'M', bowling: { wickets: 2, runs: 30 } },
+    { date: '2026-09-01', format: 'T20', fixture: 'a', batting: { runs: 5, balls: 4, out: true } },
+  ];
+  const fresh = [
+    { date: '2026-10-18', format: 'Test', fixture: 'f', matchId: 'M', bowling: { wickets: 5, runs: 48 } },
+  ];
+  const [row] = keepRicher(previous, fresh, 'x', { today: '2026-10-21' });
+  assert.deepEqual(row.bowling, { wickets: 5, runs: 48 });
+});
