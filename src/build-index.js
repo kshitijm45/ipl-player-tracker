@@ -426,9 +426,18 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
     //
     // Only forward. A snapshot ahead of the scrape is a live reading the page has not
     // caught up with, and the store is right to keep it; one behind is simply old.
-    if ((src.batting?.runs ?? -1) > (r.batting?.runs ?? -1)) r.batting = { ...src.batting };
-    if ((src.bowling?.wickets ?? -1) > (r.bowling?.wickets ?? -1) ||
-        (src.bowling?.runs ?? -1) > (r.bowling?.runs ?? -1)) {
+    //
+    // And only into a discipline this row already carries. `dailyRows` splits an
+    // innings whose batting and bowling closed on different days into one row each,
+    // so filling the missing half here would put the whole innings on both days —
+    // Priyansh Arya's 199 appeared on the 18th and again on the 20th, once per row,
+    // and 542 innings were duplicated that way.
+    if (r.batting && (src.batting?.runs ?? -1) > (r.batting.runs ?? -1)) {
+      r.batting = { ...src.batting };
+    }
+    if (r.bowling &&
+        ((src.bowling?.wickets ?? -1) > (r.bowling.wickets ?? -1) ||
+         (src.bowling?.runs ?? -1) > (r.bowling.runs ?? -1))) {
       r.bowling = { ...src.bowling };
     }
     // The match URL too, which the store only began recording later. It is what lets

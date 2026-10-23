@@ -37,9 +37,12 @@ function carryEnrichment(crexRows, dayRows) {
       r.bowling = { ...r.bowling, balls: src.bowling.balls };
     }
     if (src.playerOfMatch) r.playerOfMatch = true;
-    if ((src.batting?.runs ?? -1) > (r.batting?.runs ?? -1)) r.batting = { ...src.batting };
-    if ((src.bowling?.wickets ?? -1) > (r.bowling?.wickets ?? -1) ||
-        (src.bowling?.runs ?? -1) > (r.bowling?.runs ?? -1)) {
+    if (r.batting && (src.batting?.runs ?? -1) > (r.batting.runs ?? -1)) {
+      r.batting = { ...src.batting };
+    }
+    if (r.bowling &&
+        ((src.bowling?.wickets ?? -1) > (r.bowling.wickets ?? -1) ||
+         (src.bowling?.runs ?? -1) > (r.bowling.runs ?? -1))) {
       r.bowling = { ...src.bowling };
     }
   }
@@ -194,4 +197,23 @@ test('an advanced bowling figure wins too', () => {
   const day = { playerId: 'p', matchId: 'M', inningsNo: 1, date: '2026-10-18', bowling: { wickets: 1, runs: 37 } };
   const [row] = carryEnrichment([scraped], [day]);
   assert.equal(row.bowling.wickets, 5);
+});
+
+test('an advanced figure does not fill a discipline the row does not carry', () => {
+  // `dailyRows` splits an innings whose batting and bowling closed on different days
+  // into one row each. Filling the missing half here put the whole innings on both
+  // days: Priyansh Arya's 199 appeared on the 18th and again on the 20th.
+  const scraped = {
+    playerId: 'p', matchId: 'M', innings: 1,
+    batting: { runs: 199, balls: 220, out: true },
+    bowling: { wickets: 0, runs: 23 },
+  };
+  const days = [
+    { playerId: 'p', matchId: 'M', inningsNo: 1, date: '2026-10-18', batting: { runs: 199, balls: 220, out: true }, bowling: null },
+    { playerId: 'p', matchId: 'M', inningsNo: 1, date: '2026-10-20', batting: null, bowling: { wickets: 0, runs: 13 } },
+  ];
+  const [batRow, bowlRow] = carryEnrichment([scraped], days);
+  assert.equal(batRow.bowling, null, 'the batting row stays batting-only');
+  assert.equal(bowlRow.batting, null, 'and the bowling row stays bowling-only');
+  assert.equal(bowlRow.bowling.runs, 23, 'while still taking the advanced figure');
 });
