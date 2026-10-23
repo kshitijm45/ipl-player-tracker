@@ -414,6 +414,23 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
       r.bowling = { ...r.bowling, balls: src.bowling.balls };
     }
     if (src.playerOfMatch) r.playerOfMatch = true;
+
+    // A figure the scrape has moved past wins over the snapshot's.
+    //
+    // The store exists to date an innings, not to hold its score: its figures are
+    // whatever the player page showed on the day each snapshot was taken, and a day
+    // that was never observed leaves the last one standing for good. Ayush Badoni
+    // made 217, the scrape read it correctly, and the build kept publishing the 115
+    // he was on when the store last saw him — three days earlier, in a match whose
+    // page CREX has since removed, so no later snapshot could ever arrive.
+    //
+    // Only forward. A snapshot ahead of the scrape is a live reading the page has not
+    // caught up with, and the store is right to keep it; one behind is simply old.
+    if ((src.batting?.runs ?? -1) > (r.batting?.runs ?? -1)) r.batting = { ...src.batting };
+    if ((src.bowling?.wickets ?? -1) > (r.bowling?.wickets ?? -1) ||
+        (src.bowling?.runs ?? -1) > (r.bowling?.runs ?? -1)) {
+      r.bowling = { ...src.bowling };
+    }
     // The match URL too, which the store only began recording later. It is what lets
     // the merge drop a row filed under a series it cannot belong to, and without it
     // every innings stored before that change is unverifiable.

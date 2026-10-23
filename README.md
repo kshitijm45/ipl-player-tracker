@@ -634,6 +634,22 @@ on day three, both appeared on day four, which was the only day the match had no
 live for. The flags are honoured only while the match can still change: a row whose
 last day is settled is a finished match, and all of its days are placeable.
 
+### The store dates an innings; it does not own the score
+
+Every multi-day innings is re-dated through the snapshot store, and the re-dated row
+carries the store's own figures — whatever the player page showed when each snapshot
+was taken. A day that is never observed leaves the last snapshot standing for good.
+
+Ayush Badoni made 217. The scrape read it correctly and stored it. The build kept
+publishing the 115 he was on when the store last saw him, three days earlier, because
+CREX had removed the match page by the time the next run looked — so no later snapshot
+could arrive, and the stale one won every build.
+
+A figure the scrape has moved past now wins. Only forward: a snapshot *ahead* of the
+scrape is a live reading the page has not caught up with, and the store is right to
+keep it. The date stays the store's either way, which is the reason the row is
+re-dated at all.
+
 ### How many days an innings took
 
 The span under a figure used to be every day of the match up to the one the innings

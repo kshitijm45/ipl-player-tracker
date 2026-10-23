@@ -37,6 +37,11 @@ function carryEnrichment(crexRows, dayRows) {
       r.bowling = { ...r.bowling, balls: src.bowling.balls };
     }
     if (src.playerOfMatch) r.playerOfMatch = true;
+    if ((src.batting?.runs ?? -1) > (r.batting?.runs ?? -1)) r.batting = { ...src.batting };
+    if ((src.bowling?.wickets ?? -1) > (r.bowling?.wickets ?? -1) ||
+        (src.bowling?.runs ?? -1) > (r.bowling?.runs ?? -1)) {
+      r.bowling = { ...src.bowling };
+    }
   }
   return dayRows;
 }
@@ -149,4 +154,44 @@ test('limited-overs still waits a full day', () => {
   // nothing from today is trusted at all.
   assert.equal(tooEarly({ date: '2026-10-08' }, '2026-10-08'), true);
   assert.equal(tooEarly({ date: '2026-10-07' }, '2026-10-08'), false);
+});
+
+test('a figure the scrape has moved past beats the snapshot', () => {
+  // The store exists to date an innings, not to hold its score: its figures are
+  // whatever the player page showed when each snapshot was taken, and a day never
+  // observed leaves the last one standing for good. Ayush Badoni made 217, the scrape
+  // read it correctly, and the build kept publishing the 115 he was on when the store
+  // last saw him — in a match whose page CREX had since removed, so no later snapshot
+  // could ever arrive.
+  const scraped = {
+    playerId: 'p', matchId: 'M', innings: 1,
+    batting: { runs: 217, balls: 246, out: true, outFrom: 'scorecard', fours: 22 },
+  };
+  const day = {
+    playerId: 'p', matchId: 'M', inningsNo: 1, date: '2026-10-18',
+    batting: { runs: 115, balls: 149, out: true },
+  };
+  const [row] = carryEnrichment([scraped], [day]);
+  assert.equal(row.batting.runs, 217);
+  assert.equal(row.batting.fours, 22);
+  assert.equal(row.date, '2026-10-18', 'the store still owns the date');
+});
+
+test('a snapshot ahead of the scrape is left alone', () => {
+  // Only forward. A snapshot ahead is a live reading the page has not caught up with,
+  // and the store is right to keep it.
+  const scraped = { playerId: 'p', matchId: 'M', innings: 1, batting: { runs: 80, balls: 150, out: false } };
+  const day = {
+    playerId: 'p', matchId: 'M', inningsNo: 1, date: '2026-10-19',
+    batting: { runs: 120, balls: 210, out: false },
+  };
+  const [row] = carryEnrichment([scraped], [day]);
+  assert.equal(row.batting.runs, 120);
+});
+
+test('an advanced bowling figure wins too', () => {
+  const scraped = { playerId: 'p', matchId: 'M', innings: 1, bowling: { wickets: 5, runs: 43, balls: 78 } };
+  const day = { playerId: 'p', matchId: 'M', inningsNo: 1, date: '2026-10-18', bowling: { wickets: 1, runs: 37 } };
+  const [row] = carryEnrichment([scraped], [day]);
+  assert.equal(row.bowling.wickets, 5);
 });
