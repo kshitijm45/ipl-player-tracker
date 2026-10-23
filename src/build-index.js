@@ -552,11 +552,43 @@ export async function buildIndex({ from = SEASON_START, slugs } = {}) {
   // Multi-day matches still being played. CREX's schedule carries only upcoming
   // limited-overs cards, so a Test is absent from the fixtures for its whole
   // duration — this is the only place the site can learn one is on.
+  // What each player has done in a match still being played.
+  //
+  // Taken from the scraped rows rather than the snapshot store. The store holds only
+  // the days it managed to observe, and a day it missed is a figure it never had:
+  // Matthew Short's 17 off 33 was scraped and stored in `data/`, but the store knew
+  // only his day-two bowling, so the section showed him as "0/6" and nothing else —
+  // a batsman listed for a match with no innings against his name.
+  //
+  // The scrape is the complete picture of what a player has done; the store's job is
+  // dating, and nothing here needs a date.
+  const scrapedByMatch = new Map();
+  for (const r of performances) {
+    if (!r.matchId) continue;
+    const k = `${r.playerId}|${r.matchId}`;
+    if (!scrapedByMatch.has(k)) scrapedByMatch.set(k, []);
+    scrapedByMatch.get(k).push(r);
+  }
+
   const inProgress = inProgressMatches(dayStore, { asOf: today })
     .map((m) => ({
       ...m,
       players: m.players
-        .map((pl) => ({ ...pl, playerId: mergedInto.get(pl.playerId) ?? pl.playerId }))
+        .map((pl) => {
+          const playerId = mergedInto.get(pl.playerId) ?? pl.playerId;
+          const scraped = scrapedByMatch.get(`${playerId}|${m.matchId}`) ?? [];
+          return {
+            ...pl,
+            playerId,
+            innings: scraped.length
+              ? scraped.map((r) => ({
+                  innings: r.innings ?? r.inningsNo ?? 1,
+                  batting: r.batting ?? null,
+                  bowling: r.bowling ?? null,
+                }))
+              : pl.innings,
+          };
+        })
         .filter((pl) => players.has(pl.playerId)),
     }))
     .filter((m) => m.players.length);

@@ -546,6 +546,15 @@ The snapshot store already has it, because the scrape reads each live match's pa
 date its innings. `inProgressMatches` groups those rows by match and the page shows
 them above Coming up, with the tracked players in each and what they have done so far.
 
+The figures come from the scraped rows, not from the store. The store holds only the
+days it managed to observe, and a day it missed is a figure it never had: Matthew
+Short's 17 off 33 was scraped and stored, but the store knew only his day-two bowling,
+so the section showed him as "0/6" and nothing else — a batsman listed for a match with
+no innings against his name. The scrape is the complete picture of what a player has
+done; the store's job is dating, and nothing in this section needs a date. A player the
+scrape has no rows for falls back to the store, which is how a slug-pinned player keeps
+his figures.
+
 **A match leaves the section when it is reported finished, not when its five days are
 up.** A Test can finish inside three, and a Sheffield Shield match in the data finished
 four days into its window — anything keyed on the calendar would leave a decided match

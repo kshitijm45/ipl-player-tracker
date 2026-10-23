@@ -178,3 +178,23 @@ test('an empty store reports nothing', () => {
   assert.deepEqual(inProgressMatches({ rows: {} }, { asOf: '2026-10-10' }), []);
   assert.deepEqual(inProgressMatches(null, { asOf: '2026-10-10' }), []);
 });
+
+test('the store reports only the days it observed', () => {
+  // Why the in-progress section takes its figures from the scrape instead. A day the
+  // store missed is a figure it never had: Matthew Short's 17 off 33 was scraped and
+  // stored, but the store knew only his day-two bowling, so the section showed him as
+  // "0/6" and nothing else — a batsman listed for a match with no innings to his name.
+  const store = {
+    rows: {
+      a: {
+        playerId: 'p', matchId: 'M', innings: 1, format: 'Test',
+        competition: 'Sheffield Shield 2026-27', status: 'Live',
+        startDate: '2026-10-18', endDate: '2026-10-23',
+        days: { 2: { date: '2026-10-20', batting: null, bowling: { wickets: 0, runs: 6 } } },
+      },
+    },
+  };
+  const [m] = inProgressMatches(store, { asOf: '2026-10-21' });
+  assert.equal(m.players[0].innings.length, 1);
+  assert.equal(m.players[0].innings[0].batting, null, 'the batting is simply absent here');
+});
