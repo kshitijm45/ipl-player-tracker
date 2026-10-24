@@ -151,6 +151,25 @@ function istToday() {
 function tooEarlyToShow(row, today) {
   const d = String(row?.date ?? '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+
+  // A multi-day innings the store never dated, in a match that could still be on.
+  //
+  // `stillCapturable` reads an unreadable match page as a finished match, so a Test
+  // whose page 404s is recorded as over: no day is stored, the row never becomes
+  // `multiDay`, and it falls through to the limited-overs rule — where a figure dated
+  // yesterday is a settled result. Devdutt Padikkal's 25 off 56 was published that
+  // way while he was still batting, and he went on to 32 off 77.
+  //
+  // Only within the match's own span, though. An undated row from a Test that began
+  // a week ago is simply one this project could never date, and withholding those
+  // would hide most of the Ranji round — Ayush Badoni's 217 among them.
+  if (!row?.multiDay && row?.provisional && isMultiDay(row?.format)) {
+    const since = new Date(Date.parse(today) - (MAX_TEST_DAYS - 1) * 864e5)
+      .toISOString()
+      .slice(0, 10);
+    if (d >= since) return true;
+  }
+
   if (row?.multiDay) {
     // A stored row is exempt from the blanket "nothing from today" rule because the
     // match page's `Day N` label proves the day was reached. Reached is not finished,

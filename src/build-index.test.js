@@ -217,3 +217,55 @@ test('an advanced figure does not fill a discipline the row does not carry', () 
   assert.equal(bowlRow.batting, null, 'and the bowling row stays bowling-only');
   assert.equal(bowlRow.bowling.runs, 23, 'while still taking the advanced figure');
 });
+
+/* ── a Test whose match page cannot be read ──
+   `stillCapturable` treats an unreadable page as a finished match, so a Test whose
+   page 404s is recorded as over: no day is stored, the row never becomes `multiDay`,
+   and it falls through to the limited-overs rule where a figure dated yesterday is a
+   settled result. Devdutt Padikkal's 25 off 56 was published that way while he was
+   still batting; he went on to 32 off 77. */
+
+function tooEarly2(row, today, MAX = 5) {
+  const d = String(row?.date ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  const multi = /test|first class|shield|ranji/i.test(row?.format ?? '');
+  if (!row?.multiDay && row?.provisional && multi) {
+    const since = new Date(Date.parse(today) - (MAX - 1) * 864e5).toISOString().slice(0, 10);
+    if (d >= since) return true;
+  }
+  if (row?.multiDay) {
+    if (d === today && row.provisional) return true;
+    return d > today;
+  }
+  return d >= today;
+}
+
+test('an undated Test innings inside the match window is withheld', () => {
+  assert.equal(
+    tooEarly2({ date: '2026-10-23', format: 'Test', provisional: true }, '2026-10-24'),
+    true
+  );
+});
+
+test('an undated Test innings outside the window is still shown', () => {
+  // An innings this project could never date. Withholding those would hide most of a
+  // Ranji round — Ayush Badoni's 217 among them.
+  assert.equal(
+    tooEarly2({ date: '2026-10-18', format: 'Test', provisional: true }, '2026-10-24'),
+    false
+  );
+});
+
+test('an undated Test innings that is not provisional is shown', () => {
+  assert.equal(
+    tooEarly2({ date: '2026-10-23', format: 'Test' }, '2026-10-24'),
+    false
+  );
+});
+
+test('a limited-overs row is unaffected by the rule', () => {
+  assert.equal(
+    tooEarly2({ date: '2026-10-23', format: 'T20', provisional: true }, '2026-10-24'),
+    false
+  );
+});

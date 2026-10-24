@@ -659,6 +659,22 @@ scrape is a live reading the page has not caught up with, and the store is right
 keep it. The date stays the store's either way, which is the reason the row is
 re-dated at all.
 
+### A Test whose match page cannot be read
+
+`stillCapturable` reads an unreadable match page as a finished match, which is right
+for a page that has been removed and wrong for one that is merely refusing traffic. A
+Test whose page 404s mid-match is recorded as over: no day is stored, the row never
+becomes `multiDay`, and it falls through to the limited-overs rule — where a figure
+dated yesterday is a settled result.
+
+Devdutt Padikkal's 25 off 56 was published that way while he was still batting, and he
+went on to 32 off 77. KL Rahul's 0 off 8 from the same match was final, but only by
+luck.
+
+An undated multi-day innings still marked provisional is now withheld — but only
+within the match's own five-day span. An undated row older than that is one this
+project could never date, and withholding those would hide most of a Ranji round.
+
 ### How many days an innings took
 
 The span under a figure used to be every day of the match up to the one the innings
