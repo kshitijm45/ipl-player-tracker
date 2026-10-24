@@ -139,6 +139,11 @@ export async function backfillScorecards({
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
       '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     viewport: { width: 1500, height: 1000 },
+    // A scorecard carries figures rather than dates, so nothing here depends on the
+    // zone today. Pinned anyway, because every other page this project reads is, and
+    // a date appearing on one of these later should not quietly arrive in UTC.
+    timezoneId: 'Asia/Kolkata',
+    locale: 'en-IN',
   });
 
   let read = 0;

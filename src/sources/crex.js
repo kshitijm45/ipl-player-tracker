@@ -261,9 +261,24 @@ export class CrexSource extends Source {
     if (cached && !cached.some((r) => mayStillChange(r, today))) return cached;
 
     // The series list renders as a side panel only at desktop width.
+    //
+    // The timezone is pinned for the same reason the fixtures scrape pins it: CREX
+    // formats dates client-side, so an innings is stamped with whatever day it was in
+    // the browser's zone. CI runs in UTC, where a match starting in the evening is
+    // still the day before — eight stored rows are dated earlier than the match they
+    // belong to began, every one of them a Sheffield Shield game in Australia, and
+    // India A's first Test in New Zealand read 23 October under UTC against 24 under
+    // IST.
+    //
+    // IST because it is the clock the rest of the project runs on: the build's
+    // `istToday`, the scrape's `observedOn`, and the fixtures scrape all use it, and
+    // a row dated in one zone and placed on a day boundary computed in another is the
+    // bug this is fixing.
     const page = await (await this.browser()).newPage({
       userAgent: UA,
       viewport: { width: 1600, height: 1000 },
+      timezoneId: 'Asia/Kolkata',
+      locale: 'en-IN',
     });
     const collected = new Map();
 

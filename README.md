@@ -659,6 +659,23 @@ scrape is a live reading the page has not caught up with, and the store is right
 keep it. The date stays the store's either way, which is the reason the row is
 re-dated at all.
 
+### Every page is read on the same clock
+
+CREX formats dates client-side, so an innings is stamped with whatever day it was in
+the browser's timezone. The fixtures scrape pins IST for exactly this reason — kick-off
+times were being published in UTC — but the player-page scrape pinned nothing, and CI
+runs in UTC.
+
+A match starting in the UTC evening therefore lands a day early. India A's first Test
+in New Zealand reads 23 October under UTC and 24 under IST, which is also the start
+date CREX itself reports; eight stored rows are dated before the match they belong to
+began, every one a Sheffield Shield game in Australia.
+
+IST because it is the clock the rest of the project runs on: the build's `istToday`,
+the scrape's `observedOn`, the day-boundary checks in the snapshot store and the
+fixtures scrape all use it. A row dated in one zone and judged against a day boundary
+computed in another is the whole of this bug.
+
 ### The match-day lookup was asking the wrong URL
 
 `fetchMatchDay` asked `/scoreboard/<id>/match-scorecard`, which is the dead end this
