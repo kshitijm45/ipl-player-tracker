@@ -145,7 +145,7 @@ export class CrexSource extends Source {
    * nothing. Cached by match id, which is stable, and re-read while the match is live
    * because the whole point is the figure as it stands today.
    */
-  async fetchMatchDay(matchId, { maxAgeMs = 3600e3 } = {}) {
+  async fetchMatchDay(matchId, { maxAgeMs = 3600e3, matchUrl = null } = {}) {
     const key = `matchday_${matchId}`;
     const cached = this.readCache(key, maxAgeMs);
     // A finished match can never change again, so its cache never expires. A live one
@@ -153,11 +153,20 @@ export class CrexSource extends Source {
     if (cached && cached.status === 'Finished') return cached;
     if (cached && maxAgeMs !== 0) return cached;
 
+    // The canonical match URL, where the scrape recorded one.
+    //
+    // `/scoreboard/<id>/` is a dead end: it redirects to an `undefined-<id>` page that
+    // now answers 404, and an unreadable page is read as a finished match. So a Test
+    // being played right now was recorded as over, its innings never dated, and a
+    // mid-innings figure published as a settled result — Devdutt Padikkal's 25 off 56
+    // while he was still batting. Every match checked 404s on the short URL and
+    // answers 200 on the canonical one, which carries the day marker and the status.
+    const url = matchUrl
+      ? `https://crex.com${String(matchUrl).replace(/^https:\/\/crex\.com/, '')}`
+      : `https://crex.com/scoreboard/${matchId}/match-scorecard`;
+
     try {
-      const res = await fetch(
-        `https://crex.com/scoreboard/${matchId}/match-scorecard`,
-        { headers: { 'User-Agent': UA }, redirect: 'follow' }
-      );
+      const res = await fetch(url, { headers: { 'User-Agent': UA }, redirect: 'follow' });
       if (!res.ok) return cached ?? { matchId, error: `http ${res.status}` };
       const data = { matchId, ...parseMatchDay(await res.text()) };
       this.writeCache(key, data);

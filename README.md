@@ -659,6 +659,22 @@ scrape is a live reading the page has not caught up with, and the store is right
 keep it. The date stays the store's either way, which is the reason the row is
 re-dated at all.
 
+### The match-day lookup was asking the wrong URL
+
+`fetchMatchDay` asked `/scoreboard/<id>/match-scorecard`, which is the dead end this
+project documented long ago for the scorecard: it redirects to an `undefined-<id>`
+page. That page now answers 404 rather than rendering something useless, and an
+unreadable page is read as a finished match.
+
+So a Test being played right now was recorded as over, its innings never dated, and a
+mid-innings figure published as a settled result. Three matches checked all answered
+404 on the short URL and 200 on the canonical one, which carries the day marker, the
+status and the venue.
+
+The canonical URL is on every row the scrape stores, and it is what the lookup uses.
+A row from before the href was kept still falls back to the id, which is no worse than
+it was.
+
 ### A Test whose match page cannot be read
 
 `stillCapturable` reads an unreadable match page as a finished match, which is right

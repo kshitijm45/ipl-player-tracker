@@ -614,6 +614,9 @@ async function recordMatchDays(source, byPlayer) {
     // match can still change.
     const meta = await source.fetchMatchDay(matchId, {
       maxAgeMs: known?.status ? 0 : 6 * 3600e3,
+      // The canonical URL, which the rows carry. Without it the lookup falls back to
+      // `/scoreboard/<id>/`, which 404s and is then read as a finished match.
+      matchUrl: rows.find((r) => r.matchUrl)?.matchUrl ?? null,
     });
     const capturable = stillCapturable(meta);
     if (capturable) live++;
