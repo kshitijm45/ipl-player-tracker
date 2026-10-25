@@ -659,6 +659,19 @@ scrape is a live reading the page has not caught up with, and the store is right
 keep it. The date stays the store's either way, which is the reason the row is
 re-dated at all.
 
+### An innings that is over in a match that is not
+
+A dismissed batsman's figure cannot grow, so holding it back because the match
+continues withholds a settled result. The flag that decides this consulted only the
+commentary feed's closing day, and a live match reports today for every innings — so
+all ten of India A's batsmen, every one out and confirmed by the scorecard, were kept
+off the day's play while the match went on.
+
+A scorecard-confirmed dismissal now settles the innings outright. Three things it
+deliberately does not do: trust the player page's own `out`, which is fabricated for
+every row; settle a batsman still at the crease; or settle a dismissed batsman who is
+also bowling, since a bowler can always be brought back.
+
 ### Every page is read on the same clock
 
 CREX formats dates client-side, so an innings is stamped with whatever day it was in

@@ -11,6 +11,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { cacheMs, keepRicher, SETTLED_AFTER_DAYS } from './ingest-crex.js';
 
 const H = 3600e3;
@@ -391,4 +392,63 @@ test('a short read updates an advancing bowling figure too', () => {
   ];
   const [row] = keepRicher(previous, fresh, 'x', { today: '2026-10-21' });
   assert.deepEqual(row.bowling, { wickets: 5, runs: 48 });
+});
+
+/* ── an innings that is over in a match that is not ──
+   A dismissed batsman's figure cannot grow, so holding it back because the match
+   continues withholds a settled result. All ten of India A's batsmen were out and
+   scorecard-confirmed on day 2 of a Test, and every one was kept off the day's play
+   because the match was still being played. */
+
+const isStillMoving = new Function(
+  'return ' + readFileSync(new URL('./ingest-crex.js', import.meta.url), 'utf8')
+    .match(/function isStillMoving[\s\S]*?\n\}/)[0]
+)();
+
+test('a scorecard-confirmed dismissal is settled mid-match', () => {
+  assert.equal(
+    isStillMoving({
+      capturable: true, ended: '2026-10-25', observedOn: '2026-10-25',
+      batting: { runs: 0, out: true, outFrom: 'scorecard' },
+    }),
+    false
+  );
+});
+
+test('a batsman still at the crease is not', () => {
+  assert.equal(
+    isStillMoving({
+      capturable: true, ended: '2026-10-25', observedOn: '2026-10-25',
+      batting: { runs: 32, out: false, outFrom: 'scorecard' },
+    }),
+    true
+  );
+});
+
+test('the player page\'s own dismissal is not enough', () => {
+  // It prints no asterisk and marks everything out, so trusting it would publish a
+  // batsman mid-innings as a settled figure — the error this flag exists to prevent.
+  assert.equal(
+    isStillMoving({
+      capturable: true, ended: '2026-10-25', observedOn: '2026-10-25',
+      batting: { runs: 10, out: true },
+    }),
+    true
+  );
+});
+
+test('a dismissed batsman who also bowls is still moving', () => {
+  // A bowler can be brought back, so his spell is only settled once the match is.
+  assert.equal(
+    isStillMoving({
+      capturable: true, ended: '2026-10-25', observedOn: '2026-10-25',
+      batting: { runs: 10, out: true, outFrom: 'scorecard' },
+      bowling: { wickets: 1, runs: 20 },
+    }),
+    true
+  );
+});
+
+test('nothing in a finished match is still moving', () => {
+  assert.equal(isStillMoving({ capturable: false, ended: null, observedOn: '2026-10-25' }), false);
 });

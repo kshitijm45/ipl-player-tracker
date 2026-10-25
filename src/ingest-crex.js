@@ -691,7 +691,14 @@ async function recordMatchDays(source, byPlayer) {
         // The commentary feed says which day each innings ended, so an innings whose
         // closing day is already behind us is settled even mid-match. Only one dated
         // today, in a match still live, is genuinely unfinished.
-        provisional: isStillMoving({ ended, capturable, observedOn }) || undefined,
+        provisional:
+          isStillMoving({
+            ended,
+            capturable,
+            observedOn,
+            batting: r.batting ?? null,
+            bowling: r.bowling ?? null,
+          }) || undefined,
         meta: {
           fixture: r.fixture ?? null,
           competition: r.competition ?? null,
@@ -729,8 +736,24 @@ async function recordMatchDays(source, byPlayer) {
  * over whatever the match is doing. Without a closing day, the match's own state is
  * all there is to go on.
  */
-function isStillMoving({ ended, capturable, observedOn }) {
+function isStillMoving({ ended, capturable, observedOn, batting, bowling }) {
   if (!capturable) return false;
+
+  // A dismissed batsman's innings is over, whatever the match is doing. The figure
+  // cannot grow, so badging it "in progress" and withholding it from the day's play
+  // is wrong — and it was withholding a whole side: all ten of India A's batsmen were
+  // out and scorecard-confirmed, and every one was held back because the match was
+  // still on.
+  //
+  // Only when the dismissal came from a scorecard. The player page prints no asterisk
+  // and marks everything out, so trusting it would publish a batsman mid-innings as a
+  // settled figure, which is the error this flag exists to prevent.
+  //
+  // Bowling has no equivalent: a bowler can always be brought back, so a spell is
+  // only settled once the match or the innings is.
+  const dismissed = batting?.outFrom === 'scorecard' && batting?.out === true;
+  if (dismissed && !bowling) return false;
+
   if (!ended) return true;
   return ended >= observedOn;
 }
