@@ -659,6 +659,23 @@ scrape is a live reading the page has not caught up with, and the store is right
 keep it. The date stays the store's either way, which is the reason the row is
 re-dated at all.
 
+### Two innings of one bowler, badged differently
+
+Whether a figure is still moving was recomputed from day position alone: anything on
+the latest day of a live match was in progress, whatever the scrape had decided. So in
+the Australia–South Africa Test, Josh Hazlewood's first-innings 1 for 59 read as a
+result and his second-innings 1 for 68 as in progress — both his, both settled, the
+second simply on day four. Sixteen of the twenty-nine live innings were badged that
+way.
+
+The innings' own flag has the last word now, because the snapshot knows what day
+position cannot: whether the batsman was out, and what the commentary feed said.
+
+That flag had to start being stored first. `recordSnapshot` wrote `provisional ||
+undefined`, so a settled innings and an unrecorded one looked identical — and a store
+written before this keeps the old day-position behaviour rather than being declared
+settled by the absence of a flag.
+
 ### An innings that is over in a match that is not
 
 A dismissed batsman's figure cannot grow, so holding it back because the match

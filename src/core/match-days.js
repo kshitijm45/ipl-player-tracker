@@ -101,6 +101,16 @@ export function expand(store, { today = new Date(Date.now() + 5.5 * 3600e3).toIS
   // stays passed.
   const liveMatch = new Set();
   const ended = new Set();
+  // Innings the scrape positively settled. Day position alone cannot tell a finished
+  // innings from a running one when both sit on the latest day: Josh Hazlewood's
+  // first-innings 1 for 59 read as a result and his second-innings 1 for 68 as in
+  // progress, though the scrape had settled both — the second simply happened to be
+  // on day four. Sixteen of twenty-nine live innings were badged that way.
+  //
+  // Only a snapshot that carries the flag counts, so a store written before the flag
+  // existed keeps the old day-position behaviour rather than being declared settled
+  // by its absence.
+  const settledInnings = new Set();
   // The furthest day of play the store has seen for each match, which is how far the
   // match had got. An innings whose last day is behind that has closed.
   const latestDay = new Map();
@@ -112,6 +122,11 @@ export function expand(store, { today = new Date(Date.now() + 5.5 * 3600e3).toIS
     // order, so a later row still marked "Live" would otherwise re-add a match an
     // earlier one had already settled.
     if (row.endDate && row.endDate < today) ended.add(row.matchId);
+    const seen = Object.values(row.days ?? {});
+    const latest = seen[seen.length - 1];
+    if (latest && 'provisional' in latest && latest.provisional === false) {
+      settledInnings.add(`${row.matchId}|${row.playerId}|${row.innings ?? 1}`);
+    }
     for (const day of Object.keys(row.days ?? {}).map(Number)) {
       if (day >= 1) latestDay.set(row.matchId, Math.max(latestDay.get(row.matchId) ?? 0, day));
     }
@@ -144,8 +159,21 @@ export function expand(store, { today = new Date(Date.now() + 5.5 * 3600e3).toIS
         // Still moving only if the match is unfinished *and* this innings has not
         // closed on an earlier day. An innings that ended on day 2 of a Test still
         // being played is a result, not a running figure.
+        //
+        // The innings' own flag has the last word. Day position alone cannot tell a
+        // finished innings from a running one when both sit on the latest day: in the
+        // Australia–South Africa Test, Josh Hazlewood's first-innings 1 for 59 showed
+        // as a result and his second-innings 1 for 68 as in progress, though the
+        // scrape had settled both — the second simply happened to be on day four.
+        // Sixteen of the twenty-nine live innings were badged that way.
+        //
+        // `dailyRows` decides this from the snapshot itself, which knows whether the
+        // batsman was out and what the commentary feed said; this only adds the
+        // match-level fact that a finished match has nothing still moving.
         provisional:
-          (liveMatch.has(row.matchId) && d.day >= (latestDay.get(row.matchId) ?? d.day)) ||
+          (liveMatch.has(row.matchId) &&
+            d.day >= (latestDay.get(row.matchId) ?? d.day) &&
+            !settledInnings.has(`${row.matchId}|${row.playerId}|${row.innings ?? 1}`)) ||
           undefined,
         // Dated by this project rather than by CREX's own row, which is the thing
         // worth being able to distinguish later.

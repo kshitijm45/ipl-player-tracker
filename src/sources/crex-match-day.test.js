@@ -717,3 +717,34 @@ test('a match still live still withholds the day being played', () => {
   assert.equal(r.day, 1);
   assert.equal(r.batting.runs, 80);
 });
+
+test('two innings of one bowler are badged by their own state', async () => {
+  // Day position alone cannot tell a finished innings from a running one when both
+  // sit on the latest day. Josh Hazlewood's first-innings 1 for 59 read as a result
+  // and his second-innings 1 for 68 as in progress, though the scrape had settled
+  // both — the second simply happened to be on day four.
+  const { observe, expand } = await import('../core/match-days.js');
+  const store = { rows: {} };
+  const meta = { format: 'Test', competition: 'AUS vs SA 2026', startDate: '2026-10-27', status: 'Live' };
+
+  observe(store, { playerId: 'HAZ', matchId: '10MS', innings: 1, day: 4, date: '2026-10-30',
+    bowling: { wickets: 1, runs: 59 }, provisional: false, meta });
+  observe(store, { playerId: 'HAZ', matchId: '10MS', innings: 2, day: 4, date: '2026-10-30',
+    bowling: { wickets: 1, runs: 68 }, provisional: false, meta });
+
+  const rows = expand(store, { today: '2026-10-31' }).filter((r) => r.playerId === 'HAZ');
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every((r) => !r.provisional), 'both are settled, and agree');
+});
+
+test('an innings the scrape left running is still badged', async () => {
+  const { observe, expand } = await import('../core/match-days.js');
+  const store = { rows: {} };
+  const meta = { format: 'Test', competition: 'AUS vs SA 2026', startDate: '2026-10-27', status: 'Live' };
+
+  observe(store, { playerId: 'X', matchId: '10MS', innings: 1, day: 4, date: '2026-10-30',
+    batting: { runs: 32, balls: 77, out: false }, provisional: true, meta });
+
+  const [row] = expand(store, { today: '2026-10-31' });
+  assert.equal(row.provisional, true);
+});

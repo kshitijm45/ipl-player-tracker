@@ -240,7 +240,12 @@ export function recordSnapshot(row, { day, date, batting, bowling, provisional }
     date,
     batting: batting ?? null,
     bowling: bowling ?? null,
-    provisional: provisional || undefined,
+    // `false` is kept rather than dropped, because "the scrape settled this innings"
+    // and "nothing was recorded" are different facts and the badge needs to tell them
+    // apart. Dropping it made every innings on the latest day of a live match read as
+    // in progress, however certain the scrape was that it had finished — Josh
+    // Hazlewood's two spells in one Test disagreed for that reason.
+    provisional: provisional === undefined ? undefined : Boolean(provisional),
   };
   return next;
 }
