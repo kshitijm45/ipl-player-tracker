@@ -659,6 +659,22 @@ scrape is a live reading the page has not caught up with, and the store is right
 keep it. The date stays the store's either way, which is the reason the row is
 re-dated at all.
 
+### Whose innings number is it
+
+The player page numbers an innings by the **batsman's own** — Josh Inglis's "1st Inn"
+is the match's third, because he had not batted before. The commentary feed, which is
+what says when each innings closed, keys by the **match's**.
+
+Dating one with the other put his day-four hundred on day two: he and Cameron Green
+appeared only in the in-progress section, with their completed innings filed four days
+and two days of play away from where they happened.
+
+The scorecard knows both numbers, and already matches a row by its figures rather than
+its number, so it records the match innings alongside the balls bowled and the
+dismissal. The feed is then asked about the right innings. A row the scorecard cannot
+place records no match innings at all and falls back to the batsman's own, which is no
+worse than before.
+
 ### Two innings of one bowler, badged differently
 
 Whether a figure is still moving was recomputed from day position alone: anything on

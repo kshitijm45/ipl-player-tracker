@@ -188,6 +188,7 @@ export function enrich(
 
       if (row.bowling) {
         const b = pickInnings(card.bowling ?? [], { ...row, slug }, 'bowling');
+        if (b?.innings != null) row.matchInnings ??= b.innings;
         if (b && b.balls != null) {
           if (row.bowling.balls == null) {
             row.bowling.balls = b.balls;
@@ -214,6 +215,13 @@ export function enrich(
 
       if (row.batting) {
         const b = pickInnings(card.batting ?? [], { ...row, slug }, 'batting');
+        // Which innings of the *match* this was.
+        //
+        // The player page numbers an innings by the batsman's own — Josh Inglis's
+        // "1st Inn" is the match's third — while the commentary feed, which says when
+        // each innings closed, keys by the match's. Dating his innings with the feed's
+        // first entry put a day-four hundred on day two.
+        if (b?.innings != null) row.matchInnings = b.innings;
         // Only a dismissal the scorecard actually stated counts. An unreadable
         // `.decision` cell leaves the innings unknown, which suppresses the average
         // rather than flattering it.

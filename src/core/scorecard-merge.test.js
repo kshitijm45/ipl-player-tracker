@@ -338,3 +338,38 @@ test('a finished re-read clears the live flag', () => {
   assert.equal(byPlayer.p1[0].scorecardLive, undefined);
   assert.equal(needsScorecard(byPlayer.p1[0]), false, 'and it is finally done');
 });
+
+test('the match innings number is recorded alongside the figures', () => {
+  // The player page numbers an innings by the batsman's own — Josh Inglis's "1st Inn"
+  // is the match's third — while the commentary feed, which says when each innings
+  // closed, keys by the match's. Dating his innings with the feed's first entry put a
+  // day-four hundred on day two, where it sat in the in-progress section and nowhere
+  // a reader would look for it.
+  const inningsThree = {
+    matchId: 'M',
+    batting: [{ slug: 'shubman-gill-O5', innings: 3, runs: 223, balls: 133, out: false }],
+    bowling: [],
+  };
+  const byPlayer = { p1: [{ matchId: 'M', innings: 1, batting: { runs: 223, balls: 133, out: true } }] };
+  enrich(byPlayer, inningsThree, { slugs });
+  assert.equal(byPlayer.p1[0].matchInnings, 3, "his first is the match's third");
+  assert.equal(byPlayer.p1[0].innings, 1, 'and his own number is untouched');
+});
+
+test('a bowling-only row takes its match innings from the bowling table', () => {
+  const card = {
+    matchId: 'M',
+    batting: [],
+    bowling: [{ slug: 'saurabh-dubey-62M', innings: 4, balls: 60, runs: 48, wickets: 4 }],
+  };
+  const byPlayer = { p2: [{ matchId: 'M', innings: 2, bowling: { wickets: 4, runs: 48 } }] };
+  enrich(byPlayer, card, { slugs });
+  assert.equal(byPlayer.p2[0].matchInnings, 4);
+});
+
+test('an innings the scorecard cannot place records no match innings', () => {
+  const card = { matchId: 'M', batting: [], bowling: [] };
+  const byPlayer = { p1: [{ matchId: 'M', innings: 1, batting: { runs: 10, balls: 8, out: true } }] };
+  enrich(byPlayer, card, { slugs });
+  assert.equal(byPlayer.p1[0].matchInnings, undefined, 'rather than guessing at one');
+});

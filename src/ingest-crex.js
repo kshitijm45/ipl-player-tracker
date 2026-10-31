@@ -654,9 +654,11 @@ async function recordMatchDays(source, byPlayer) {
 
     for (const r of rows) {
       const innings = r.innings ?? 1;
-      // Prefer the feed's closing day. Fall back to the live label, which still
-      // places a figure read mid-match on the day it was read.
-      const ended = feed?.endedOn?.[innings] ?? null;
+      // The feed keys by the *match's* innings; the player page numbers by the
+      // batsman's own, so Josh Inglis's "1st Inn" is the match's third. Where the
+      // scorecard has told us which is which, ask the feed about the right one —
+      // otherwise his day-four hundred is dated with match-innings one, on day two.
+      const ended = feed?.endedOn?.[r.matchInnings ?? innings] ?? null;
       const { day, date, from } = ended
         ? { day: dayNumber(meta?.startDate, ended), date: ended, from: 'commentary' }
         : resolveDay({
