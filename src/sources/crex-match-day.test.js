@@ -748,3 +748,40 @@ test('an innings the scrape left running is still badged', async () => {
   const [row] = expand(store, { today: '2026-10-31' });
   assert.equal(row.provisional, true);
 });
+
+test('a discipline seen only on unsettled days is still placed', () => {
+  // One placeable set for the whole row drops a discipline that never appears on a
+  // settled day. Cooper Connolly's bowling settled on day two and his batting was
+  // first seen on day three, so the set was [2] and his 29 off 83 vanished — the row
+  // published his spell and no innings at all.
+  const row = {
+    innings: 1,
+    days: {
+      1: { date: '2026-10-27', batting: null, bowling: { wickets: 1, runs: 41 }, provisional: true },
+      2: { date: '2026-10-28', batting: null, bowling: { wickets: 1, runs: 41 }, provisional: false },
+      3: { date: '2026-10-29', batting: { runs: 29, balls: 83, out: true }, bowling: { wickets: 1, runs: 41 }, provisional: true },
+    },
+  };
+  const rows = dailyRows(row);
+  const bat = rows.find((r) => r.batting);
+  const bowl = rows.find((r) => r.bowling);
+  assert.ok(bat, 'the innings is reported');
+  assert.equal(bat.batting.runs, 29);
+  assert.equal(bat.day, 3, 'on the day it was seen');
+  assert.equal(bowl.day, 2, 'and the spell keeps its own settled day');
+});
+
+test('a row whose disciplines share settled days is unchanged', () => {
+  // The ordinary case must not move.
+  const row = {
+    innings: 1,
+    days: {
+      1: { date: '2026-10-27', batting: { runs: 20, balls: 40, out: true }, bowling: { wickets: 2, runs: 30 } },
+      2: { date: '2026-10-28', batting: { runs: 20, balls: 40, out: true }, bowling: { wickets: 2, runs: 30 } },
+    },
+  };
+  const rows = dailyRows(row);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].batting.runs, 20);
+  assert.deepEqual(rows[0].bowling, { wickets: 2, runs: 30 });
+});

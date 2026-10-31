@@ -348,8 +348,23 @@ export function dailyRows(row) {
   // the next two days: dating the pair by whichever moved last put his day-one innings
   // on day three, where it sat beside the second innings he really did play that day
   // and showed him twice on one date.
-  const batDay = lastDayThatMoved(row, placeable, 'batting');
-  const bowlDay = lastDayThatMoved(row, placeable, 'bowling');
+  // Each discipline is placed on the settled days it actually appears on.
+  //
+  // One `placeable` set for the whole row drops a discipline that only ever appears
+  // on unsettled days: Cooper Connolly's bowling settled on day two and his batting
+  // was first seen on day three, so the set was [2] and his 29 off 83 vanished — the
+  // row published his spell and no innings at all.
+  const placeableFor = (which) => {
+    const has = placeable.filter((d) => row.days[d]?.[which]);
+    if (has.length) return placeable;
+    // Nothing settled carries this discipline; fall back to every day that does, so
+    // a figure read only on an unsettled day is still placed rather than dropped.
+    const anywhere = days.filter((d) => row.days[d]?.[which]);
+    return anywhere.length ? anywhere : placeable;
+  };
+
+  const batDay = lastDayThatMoved(row, placeableFor('batting'), 'batting');
+  const bowlDay = lastDayThatMoved(row, placeableFor('bowling'), 'bowling');
   const endDay = Math.max(batDay, bowlDay);
 
   const snap = row.days[endDay];

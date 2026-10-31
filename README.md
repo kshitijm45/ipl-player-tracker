@@ -659,6 +659,20 @@ scrape is a live reading the page has not caught up with, and the store is right
 keep it. The date stays the store's either way, which is the reason the row is
 re-dated at all.
 
+### A discipline seen only while the match was live
+
+An innings is placed on the days whose play had finished when they were read, and that
+set was computed once for the whole row. A discipline that only ever appears on
+unsettled days therefore has nowhere to go and is dropped.
+
+Cooper Connolly's bowling settled on day two and his batting was first seen on day
+three, so the set was [2] and his 29 off 83 vanished — the row published his spell and
+no innings at all. Six rows lost a figure that way.
+
+Each discipline now gets its own set: the settled days where it appears, or, where it
+appears on none of them, every day that has it. A figure read only while the match was
+live is still placed, marked as still moving, rather than not published.
+
 ### Whose innings number is it
 
 The player page numbers an innings by the **batsman's own** — Josh Inglis's "1st Inn"
